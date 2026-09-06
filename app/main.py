@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 
 from .db import (init_db, create_document, list_documents, set_status, Document,
@@ -80,7 +80,6 @@ def api_doc_content(doc_id: int):
 def api_kb_vectors(kb_id: Optional[int] = None):
     """向量库可视化：PCA 降至二维，返回散点数据（按文档分组着色）。
     超过 3000 块时按最新截断采样，避免大库全量拉取拖垮内存。"""
-    import numpy as np
     from .db import get_kb_chunks_for_viz
     try:
         rows = get_kb_chunks_for_viz(kb_id, limit=3000)
@@ -90,12 +89,7 @@ def api_kb_vectors(kb_id: Optional[int] = None):
     if not rows:
         return {"points": [], "docs": [], "variance": []}
     try:
-        X = np.array([r["embedding"] for r in rows], dtype=np.float32)
-        X = X - X.mean(axis=0)
-        # 截断 SVD 取前两主成分
-        U, S, Vt = np.linalg.svd(X, full_matrices=False)
-        proj = X @ Vt[:2].T
-        var = (S ** 2) / (S ** 2).sum()
+        proj, var = _project_vectors([r["embedding"] for r in rows])
     except Exception as e:
         raise HTTPException(status_code=502,
                             detail=f"PCA 降维失败：{type(e).__name__}: {e}")
@@ -108,15 +102,47 @@ def api_kb_vectors(kb_id: Optional[int] = None):
             "docs": [{"doc_id": k, "filename": v} for k, v in doc_names.items()],
             "variance": [round(float(v), 3) for v in var[:2]]}
 
+
+def _project_vectors(vectors: list[list[float]]) -> tuple[list[list[float]], list[float]]:
+    """将向量安全投影到二维；小样本和零方差数据也返回有限数值。"""
+    import numpy as np
+
+    if not vectors:
+        return [], []
+    X = np.asarray(vectors, dtype=np.float32)
+    if len(X) == 1:
+        return [[0.0, 0.0]], [0.0, 0.0]
+    X = X - X.mean(axis=0)
+    _, singular_values, components = np.linalg.svd(X, full_matrices=False)
+    dimensions = min(2, components.shape[0])
+    projection = X @ components[:dimensions].T
+    if dimensions < 2:
+        projection = np.pad(projection, ((0, 0), (0, 2 - dimensions)))
+    total_variance = float((singular_values ** 2).sum())
+    if total_variance == 0.0:
+        variance = [0.0, 0.0]
+    else:
+        variance = ((singular_values ** 2) / total_variance)[:2].tolist()
+        variance += [0.0] * (2 - len(variance))
+    return projection[:, :2].tolist(), variance
+
 # ---------- 问答 ----------
 class ChatReq(BaseModel):
-    question: str
+    question: str = Field(min_length=1)
     session_id: str = "default"
     kb_id: Optional[int] = None   # 指定向量库检索；None 检索全部
-    top_k: int = 4                # 最终注入的片段数上限
+    top_k: int = Field(default=4, ge=1, le=10)  # 最终注入的片段数上限
     web_enabled: bool = True      # 知识库不足时是否联网搜索兜底
-    sim_threshold: float = 0.4    # 向量相似度粗筛阈值
+    sim_threshold: float = Field(default=0.4, ge=0.0, le=1.0)
     use_memory: bool = True       # 是否启用会话长期记忆
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("问题不能为空")
+        return value
 
 def _refresh_memory(session_id: str, question: str, answer: str):
     """后台任务：增量更新会话长期记忆（不阻塞响应）"""
@@ -161,13 +187,14 @@ def chat(req: ChatReq, background: BackgroundTasks):
     answer = out["answer"]
 
     # 3) 回写会话历史，后台更新长期记忆
-    save_message(req.session_id, "user", req.question)
-    save_message(req.session_id, "assistant", answer)
+    user_message_id = save_message(req.session_id, "user", req.question)
+    assistant_message_id = save_message(req.session_id, "assistant", answer)
     if req.use_memory:
         background.add_task(_refresh_memory, req.session_id, req.question, answer)
 
     return {
         "answer": answer,
+        "message_ids": {"user": user_message_id, "assistant": assistant_message_id},
         "intent": out["intent"],
         "elapsed_ms": round((_time.perf_counter() - t0) * 1000),
         "trace": out.get("trace", []),

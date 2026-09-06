@@ -1,0 +1,62 @@
+from fastapi import BackgroundTasks
+
+from app import main
+
+
+def test_chat_response_includes_persisted_message_ids(monkeypatch):
+    monkeypatch.setattr(main, "get_history", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(main, "get_memory", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        main.rag_graph,
+        "invoke",
+        lambda _state: {
+            "answer": "answer",
+            "intent": "kb",
+            "trace": [],
+            "docs": [],
+            "web_results": [],
+        },
+    )
+    ids = iter([41, 42])
+    monkeypatch.setattr(main, "save_message", lambda *_args: next(ids))
+
+    response = main.chat(
+        main.ChatReq(question="question", use_memory=False), BackgroundTasks()
+    )
+
+    assert response["message_ids"] == {"user": 41, "assistant": 42}
+
+
+def test_delete_session_removes_messages_and_memory(monkeypatch):
+    deleted_models = []
+
+    class Query:
+        def __init__(self, model):
+            self.model = model
+
+        def filter(self, *_args):
+            return self
+
+        def delete(self):
+            deleted_models.append(self.model)
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def query(self, model):
+            return Query(model)
+
+        def commit(self):
+            pass
+
+    from app import db
+
+    monkeypatch.setattr(db, "Session", FakeSession)
+    db.delete_session("session")
+
+    assert deleted_models == [db.ChatMessage, db.SessionMemory]
+

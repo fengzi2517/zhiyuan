@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { View } from '@element-plus/icons-vue'
 import { listKbs, listDocs, uploadDoc, getDocContent } from '../api'
+import { shouldPollDocuments } from '../polling'
 
 const kbs = ref([])
 const selectedKb = ref(null)   // null = 全部
@@ -21,13 +22,14 @@ async function refreshKbs() {
 
 async function refreshDocs() {
   docs.value = await listDocs(selectedKb.value)
+  ensurePolling()
 }
 
 // 有处理中的文档时每 5 秒轮询
 function ensurePolling() {
   clearInterval(timer)
-  if (docs.value.some(d => d.status === 'pending')) {
-    timer = setInterval(refreshDocs, 5000)
+  if (shouldPollDocuments(docs.value)) {
+    timer = setInterval(() => refreshDocs().catch(() => clearInterval(timer)), 5000)
   }
 }
 
@@ -111,6 +113,7 @@ onUnmounted(() => clearInterval(timer))
           <el-tag :type="statusTag(row.status)" size="small">{{ statusText(row.status) }}</el-tag>
         </template>
       </el-table-column>
+      <el-table-column prop="error_message" label="失败原因" min-width="200" show-overflow-tooltip />
       <el-table-column label="操作" width="100" fixed="right">
         <template #default="{ row }">
           <el-button size="small" :icon="View" @click="viewDoc(row)">查看</el-button>

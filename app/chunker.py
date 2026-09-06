@@ -10,7 +10,7 @@ _HEADING_RE = re.compile(
     r")"
 )
 # 句末标点（用于长段落按句切分，避免拦腰截断）
-_SENT_SPLIT = re.compile(r"(?<=[。！？；!?;])")
+_SENT_SPLIT = re.compile(r"(?<=[。！？；.!?;])\s*")
 
 def chunk_text(text: str, size: int = 500, overlap: int = 120) -> list[str]:
     """语义感知切块：
@@ -63,21 +63,43 @@ def chunk_text(text: str, size: int = 500, overlap: int = 120) -> list[str]:
         if buf.strip():
             chunks.append(buf)
 
-    return [c for c in chunks if len(c.strip()) > 10]
+    kept = [c for c in chunks if len(c.strip()) > 10]
+    if not kept and text.strip():
+        return [text.strip()]
+    return kept
 
 def _split_long(p: str, size: int, overlap: int) -> list[str]:
     """超长段落按句子边界切分"""
     sents = [s for s in _SENT_SPLIT.split(p) if s.strip()]
     out, buf = [], ""
     for s in sents:
+        if len(s) > size:
+            if buf:
+                out.append(buf)
+                buf = ""
+            out.extend(_split_by_chars(s, size, overlap))
+            continue
         if buf and len(buf) + len(s) > size:
             out.append(buf)
-            buf = _tail_sentences(buf, overlap) + s
+            buf = (_tail_sentences(buf, overlap) + s)[-size:]
         else:
             buf += s
     if buf.strip():
         out.append(buf)
     return out
+
+
+def _split_by_chars(text: str, size: int, overlap: int) -> list[str]:
+    """句子本身过长时的保底切分，确保任何块都不超过 size。"""
+    step = max(1, size - min(overlap, size - 1))
+    chunks = []
+    for start in range(0, len(text), step):
+        chunk = text[start:start + size]
+        if chunk.strip():
+            chunks.append(chunk)
+        if start + size >= len(text):
+            break
+    return chunks
 
 def _tail_sentences(text: str, overlap: int) -> str:
     """取文本末尾约 overlap 字的完整句子，作为块间上下文重叠"""

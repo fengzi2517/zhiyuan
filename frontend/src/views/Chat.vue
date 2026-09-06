@@ -2,7 +2,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, Edit, Collection } from '@element-plus/icons-vue'
-import { marked } from 'marked'
+import { renderSafeMarkdown } from '../security'
 import { listKbs, chat, listSessions, getSessionMessages, deleteSession, editMessage, getSessionMemory } from '../api'
 import { settings } from '../settings'
 
@@ -70,7 +70,8 @@ async function send() {
   if (!q || sending.value) return
   if (!currentSession.value) currentSession.value = newSessionId()
   input.value = ''
-  messages.value.push({ role: 'user', content: q })
+  const userMessage = { role: 'user', content: q }
+  messages.value.push(userMessage)
   const pending = { role: 'assistant', content: '', sources: null, loading: true }
   messages.value.push(pending)
   scrollToBottom()
@@ -88,6 +89,8 @@ async function send() {
     pending.intent = res.intent
     pending.trace = res.trace || []
     pending.elapsedMs = res.elapsed_ms
+    userMessage.id = res.message_ids?.user
+    pending.id = res.message_ids?.assistant
     loadSessions()   // 刷新侧栏预览与排序
   } catch (e) {
     pending.content = '请求失败：' + (e.response?.data?.detail || e.message)
@@ -128,7 +131,7 @@ async function saveEdit(m) {
 }
 
 function render(md) {
-  return marked.parse(md || '', { breaks: true })
+  return renderSafeMarkdown(md)
 }
 
 function scrollToBottom() {

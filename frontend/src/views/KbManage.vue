@@ -3,6 +3,7 @@ import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts'
 import { listKbs, createKb, deleteKb, getKbVectors } from '../api'
+import { escapeHtml } from '../security'
 
 const kbs = ref([])
 const loading = ref(false)
@@ -98,7 +99,7 @@ function renderChart() {
       formatter: p => {
         const d = p.data
         return `<div style="max-width:340px;white-space:normal;font-size:12px;line-height:1.6">
-          <b>#${d.chunk_id}</b> ${d.preview || ''}…</div>`
+          <b>#${d.chunk_id}</b> ${escapeHtml(d.preview)}…</div>`
       },
     },
     legend: { type: 'scroll', bottom: 0, textStyle: { fontSize: 11, color: '#66625a' } },

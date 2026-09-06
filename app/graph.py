@@ -91,6 +91,7 @@ def rerank_node(state: RAGState) -> dict:
     if scores is None:   # 降级：相似度已降序，直接取前 top_k
         keep = docs[:state["top_k"]]
         return {"docs": keep,
+                "retries": state["retries"] + (1 if not keep else 0),
                 **_trace(state, {"stage": "rerank", "mode": "降级（相似度排序）", "kept": len(keep)})}
     ranked = sorted(zip(docs, scores), key=lambda x: x[1], reverse=True)
     keep = [d for d, s in ranked
@@ -158,7 +159,7 @@ def _after_understand(state: RAGState) -> str:
     if state["intent"] == "chitchat":
         return "chitchat"
     if state["intent"] == "web":
-        return "web_search"
+        return "web_search" if state["web_enabled"] else "generate"
     return "retrieve"
 
 def _after_rerank(state: RAGState) -> str:

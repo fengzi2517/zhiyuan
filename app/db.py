@@ -8,6 +8,15 @@ Base = declarative_base()
 engine = create_engine(config.DATABASE_URL, pool_pre_ping=True)
 Session = sessionmaker(bind=engine)
 
+
+def _assert_embedding_dimension(actual_type: str | None, expected_dim: int) -> None:
+    expected_type = f"vector({expected_dim})"
+    if actual_type and actual_type != expected_type:
+        raise RuntimeError(
+            f"数据库向量类型为 {actual_type}，配置要求 {expected_type}。"
+            "请先备份数据并执行显式重建迁移；应用不会自动删除文档。"
+        )
+
 class KnowledgeBase(Base):
     __tablename__ = "knowledge_bases"
     id = Column(Integer, primary_key=True)
@@ -22,6 +31,7 @@ class Document(Base):
     filename = Column(String)
     status = Column(String, default="pending")   # pending / done / failed
     content = Column(Text, default="")     # 提取的全文文本（供前端查看）
+    error_message = Column(Text, default="")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class Chunk(Base):
@@ -54,8 +64,9 @@ def init_db():
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_documents_kb_id ON documents (kb_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_chunks_kb_id ON chunks (kb_id)"))
         conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS content TEXT"))
+        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS error_message TEXT"))
         conn.commit()
-    # 向量维度变更迁移：embedding 列维度与配置不符时，清空向量并重建列类型（需重新上传资料）
+    # 向量维度安全检查：不匹配时拒绝启动，避免应用启动过程静默删除业务数据
     # 注意：pgvector 的 atttypmod 即维度本身（vector(1024) → typmod=1024），
     # 不能用 varchar 的 typmod-4 约定判断，否则每次重启都会误清库
     with engine.connect() as conn:
@@ -64,12 +75,7 @@ def init_db():
             "JOIN pg_class c ON a.attrelid=c.oid "
             "WHERE c.relname='chunks' AND a.attname='embedding' AND NOT a.attisdropped"
         )).first()
-        if row and row[0] and row[0] != f"vector({config.EMBEDDING_DIM})":
-            conn.execute(text("DELETE FROM chunks"))
-            conn.execute(text(
-                f"ALTER TABLE chunks ALTER COLUMN embedding TYPE vector({config.EMBEDDING_DIM})"))
-            conn.execute(text("DELETE FROM documents"))
-            conn.commit()
+        _assert_embedding_dimension(row[0] if row else None, config.EMBEDDING_DIM)
     # HNSW 近似最近邻索引（余弦距离），数据量大时避免全表线性扫描
     with engine.connect() as conn:
         conn.execute(text(
@@ -109,11 +115,12 @@ def create_document(filename: str, kb_id: int | None = None) -> int:
         s.add(d); s.commit(); s.refresh(d)
         return d.id
 
-def set_status(doc_id: int, status: str):
+def set_status(doc_id: int, status: str, error_message: str = ""):
     with Session() as s:
         doc = s.get(Document, doc_id)
         if doc:
             doc.status = status
+            doc.error_message = error_message
             s.commit()
 
 def save_chunks(doc_id: int, kb_id: int | None, chunks: list[str], embeddings: list[list[float]]):
@@ -136,7 +143,8 @@ def get_document_content(doc_id: int) -> dict | None:
         if not d:
             return None
         return {"id": d.id, "filename": d.filename, "kb_id": d.kb_id,
-                "content": d.content or "", "status": d.status}
+                "content": d.content or "", "status": d.status,
+                "error_message": d.error_message or ""}
 
 def get_kb_chunks_for_viz(kb_id: int | None, limit: int = 3000) -> list[dict]:
     """取库内向量块（含原文与文档名）供 PCA 可视化；大库按最新截断采样"""
@@ -154,7 +162,8 @@ def list_documents(kb_id: int | None = None, limit: int = 50) -> list[dict]:
         q = s.query(Document)
         if kb_id is not None:
             q = q.filter(Document.kb_id == kb_id)
-        return [{"id": d.id, "kb_id": d.kb_id, "filename": d.filename, "status": d.status}
+        return [{"id": d.id, "kb_id": d.kb_id, "filename": d.filename,
+                 "status": d.status, "error_message": d.error_message or ""}
                 for d in q.order_by(Document.id.desc()).limit(limit)]
 
 def search_chunks(question: str, kb_id: int | None = None, top_k: int = 4) -> list[str]:
@@ -250,12 +259,16 @@ def update_message(msg_id: int, content: str) -> bool:
 def delete_session(session_id: str):
     with Session() as s:
         s.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
+        s.query(SessionMemory).filter(SessionMemory.session_id == session_id).delete()
         s.commit()
 
-def save_message(session_id: str, role: str, content: str):
+def save_message(session_id: str, role: str, content: str) -> int:
     with Session() as s:
-        s.add(ChatMessage(session_id=session_id, role=role, content=content))
+        message = ChatMessage(session_id=session_id, role=role, content=content)
+        s.add(message)
         s.commit()
+        s.refresh(message)
+        return message.id
 
 def get_history(session_id: str, limit: int = 6) -> list[str]:
     """取最近 limit 条消息，格式化为 Q:/A: 行，按时间正序返回"""

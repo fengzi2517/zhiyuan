@@ -14,3 +14,5 @@ rapidocr_onnxruntime
 opencv-python-headless
 pypdf
 python-docx
+PyMuPDF
+pytest
