@@ -16,6 +16,7 @@ def test_duplicate_source_reuses_one_number():
 
 def test_web_url_fragment_is_not_part_of_source_identity():
     assert normalize_web_url("HTTPS://Example.COM/path?q=1#section") == "https://example.com/path?q=1"
+    assert normalize_web_url("javascript:alert(1)") == ""
 
 
 def test_invalid_citations_are_removed_and_unused_sources_are_hidden():

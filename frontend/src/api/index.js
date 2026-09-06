@@ -1,7 +1,9 @@
 import axios from 'axios'
 
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000',
+  baseURL: API_BASE_URL,
   timeout: 180000,
 })
 
@@ -18,6 +20,8 @@ export const uploadDoc = (file, kbId) => {
   return api.post('/upload', form, { params: kbId ? { kb_id: kbId } : {} }).then(r => r.data)
 }
 export const getDocContent = (id) => api.get(`/documents/${id}/content`).then(r => r.data)
+export const getChunkContext = (docId, chunkId) => api.get(`/documents/${docId}/chunks/${chunkId}/context`).then(r => r.data)
+export const getOriginalDocumentUrl = (docId) => `${API_BASE_URL}/documents/${docId}/original`
 
 // 向量可视化
 export const getKbVectors = (kbId) => api.get(`/kbs/${kbId}/vectors`).then(r => r.data)

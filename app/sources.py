@@ -13,12 +13,19 @@ class Source(BaseModel):
     document_id: int | None = None
     chunk_id: int | None = None
     location: str = ""
+    page_start: int | None = None
+    page_end: int | None = None
+    section: str = ""
+    start_char: int | None = None
+    end_char: int | None = None
     score: float | None = None
     number: int | None = Field(default=None, ge=1)
 
 
 def normalize_web_url(url: str) -> str:
     parsed = urlsplit(url.strip())
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        return ""
     hostname = (parsed.hostname or "").lower()
     port = f":{parsed.port}" if parsed.port else ""
     netloc = hostname + port

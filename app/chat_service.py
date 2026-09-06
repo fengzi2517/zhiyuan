@@ -162,6 +162,9 @@ def _kb_sources(rows: list[dict]) -> list[Source]:
         kind="kb", key=f"chunk:{row['chunk_id']}", title=row["title"],
         content=row.get("content", ""), document_id=row.get("document_id"),
         chunk_id=row.get("chunk_id"), location=row.get("location", ""),
+        page_start=row.get("page_start"), page_end=row.get("page_end"),
+        section=row.get("section", ""), start_char=row.get("start_char"),
+        end_char=row.get("end_char"),
         score=row.get("score"),
     ) for row in rows]
 
