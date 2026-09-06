@@ -155,11 +155,28 @@ def set_status(doc_id: int, status: str, error_message: str = ""):
             doc.error_message = error_message
             s.commit()
 
-def save_chunks(doc_id: int, kb_id: int | None, chunks: list[str], embeddings: list[list[float]]):
+def save_chunks(doc_id: int, kb_id: int | None, chunks, embeddings: list[list[float]]):
     with Session() as s:
-        s.add_all([Chunk(doc_id=doc_id, kb_id=kb_id, content=c, embedding=e)
-                   for c, e in zip(chunks, embeddings)])
+        rows = []
+        for chunk, embedding in zip(chunks, embeddings):
+            if isinstance(chunk, str):
+                rows.append(Chunk(doc_id=doc_id, kb_id=kb_id, content=chunk, embedding=embedding))
+            else:
+                rows.append(Chunk(
+                    doc_id=doc_id, kb_id=kb_id, content=chunk.content, embedding=embedding,
+                    page_start=chunk.page_start, page_end=chunk.page_end,
+                    section=chunk.section, start_char=chunk.start_char, end_char=chunk.end_char,
+                ))
+        s.add_all(rows)
         s.commit()
+
+
+def save_document_storage_path(doc_id: int, storage_path: str):
+    with Session() as s:
+        document = s.get(Document, doc_id)
+        if document:
+            document.storage_path = storage_path
+            s.commit()
 
 def save_document_text(doc_id: int, text: str):
     """保存提取的全文文本（供前端查看）"""

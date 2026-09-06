@@ -1,4 +1,6 @@
 import re
+from dataclasses import dataclass
+from .parser import ParsedUnit
 
 # 标题行特征：markdown 标题 / 中文章节（第一章、一、）/ 阿拉伯数字编号（1. / 1.2.3 / 第1条）
 _HEADING_RE = re.compile(
@@ -11,6 +13,50 @@ _HEADING_RE = re.compile(
 )
 # 句末标点（用于长段落按句切分，避免拦腰截断）
 _SENT_SPLIT = re.compile(r"(?<=[。！？；.!?;])\s*")
+
+
+@dataclass(frozen=True)
+class ChunkData:
+    content: str
+    page_start: int | None
+    page_end: int | None
+    section: str
+    start_char: int
+    end_char: int
+
+
+def chunk_units(units: list[ParsedUnit], size: int = 500, overlap: int = 120) -> list[ChunkData]:
+    result: list[ChunkData] = []
+    for unit in units:
+        cursor = 0
+        current_section = ""
+        for content in chunk_text(unit.text, size=size, overlap=overlap):
+            heading = _section_heading(content)
+            if heading:
+                current_section = heading
+            local_start = unit.text.find(content, max(0, cursor - overlap))
+            if local_start < 0:
+                local_start = unit.text.find(content)
+            if local_start < 0:
+                local_start = cursor
+            local_end = local_start + len(content)
+            result.append(ChunkData(
+                content=content,
+                page_start=unit.page,
+                page_end=unit.page,
+                section=current_section,
+                start_char=unit.start_char + local_start,
+                end_char=unit.start_char + local_end,
+            ))
+            cursor = local_end
+    return result
+
+
+def _section_heading(content: str) -> str:
+    first = content.splitlines()[0].strip() if content else ""
+    if not _HEADING_RE.match(first):
+        return ""
+    return re.sub(r"^#{1,6}\s*", "", first).strip()
 
 def chunk_text(text: str, size: int = 500, overlap: int = 120) -> list[str]:
     """语义感知切块：

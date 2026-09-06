@@ -1,7 +1,10 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()   # 本机裸跑时从项目根目录 .env 加载配置
+
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", Path(__file__).resolve().parent.parent / "uploads"))
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://rag:rag@127.0.0.1:5435/rag")
 
