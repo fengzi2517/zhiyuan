@@ -1,14 +1,15 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { View } from '@element-plus/icons-vue'
 import { listKbs, listDocs, uploadDoc, getDocContent } from '../api'
-import { shouldPollDocuments } from '../polling'
+import { shouldPollDocuments, summarizeDocuments } from '../polling'
 
 const kbs = ref([])
 const selectedKb = ref(null)   // null = 全部
 const docs = ref([])
 const uploading = ref(false)
+const summary = computed(() => summarizeDocuments(docs.value))
 let timer = null
 
 // 资料查看
@@ -37,10 +38,10 @@ async function refresh() {
   await refreshDocs()
 }
 
-async function onUpload(opt) {
+async function onUpload(opt, targetKb = selectedKb.value) {
   uploading.value = true
   try {
-    await uploadDoc(opt.file, selectedKb.value)
+    await uploadDoc(opt.file, targetKb)
     ElMessage.success('上传成功，后台处理中')
     await refresh()
   } catch (e) {
@@ -48,6 +49,14 @@ async function onUpload(opt) {
   } finally {
     uploading.value = false
   }
+}
+
+function retryDoc(row) {
+  const picker = document.createElement('input')
+  picker.type = 'file'
+  picker.accept = '.pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.bmp,.webp'
+  picker.onchange = () => picker.files?.[0] && onUpload({ file: picker.files[0] }, row.kb_id)
+  picker.click()
 }
 
 async function viewDoc(row) {
@@ -96,6 +105,13 @@ onUnmounted(() => clearInterval(timer))
       </div>
     </template>
 
+    <div class="doc-summary">
+      <div><strong>{{ summary.total }}</strong><span>全部资料</span></div>
+      <div><strong>{{ summary.done }}</strong><span>可供检索</span></div>
+      <div><strong>{{ summary.pending }}</strong><span>处理中</span></div>
+      <div :class="{ danger: summary.failed }"><strong>{{ summary.failed }}</strong><span>需处理</span></div>
+    </div>
+
     <el-alert v-if="!selectedKb" type="info" :closable="false" style="margin-bottom: 12px"
               title="未选择向量库时，上传的资料不归属于任何库；问答时选「全部」才会检索到它们" />
 
@@ -113,9 +129,10 @@ onUnmounted(() => clearInterval(timer))
         </template>
       </el-table-column>
       <el-table-column prop="error_message" label="失败原因" min-width="200" show-overflow-tooltip />
-      <el-table-column label="操作" width="100" fixed="right">
+      <el-table-column label="操作" width="170" fixed="right">
         <template #default="{ row }">
           <el-button size="small" :icon="View" @click="viewDoc(row)">查看</el-button>
+          <el-button v-if="row.status === 'failed'" size="small" type="danger" text @click="retryDoc(row)">重新入库</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -138,6 +155,11 @@ onUnmounted(() => clearInterval(timer))
 <style scoped>
 .doc-card { animation: rise 0.4s ease both; }
 .card-title { font-size: 15px; font-weight: 700; color: var(--ink); letter-spacing: 0.08em; }
+.doc-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--hairline-soft); border:1px solid var(--hairline-soft); margin-bottom:16px; }
+.doc-summary>div { display:flex; align-items:baseline; gap:9px; padding:13px 16px; background:#fffefa; }
+.doc-summary strong { font:600 22px/1 Georgia,serif; color:var(--accent-deep); }
+.doc-summary span { color:var(--ink-3); font-size:11px; letter-spacing:.06em; }
+.doc-summary .danger strong { color:var(--seal); }
 
 .doc-table :deep(.el-table__row) td {
   border-bottom: 1px solid var(--hairline-soft);

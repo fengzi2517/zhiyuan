@@ -2,18 +2,20 @@ import { reactive } from 'vue'
 
 const KEY = 'rag-app-settings'
 
-const defaults = { topK: 4, webEnabled: true, enterSend: true, simThreshold: 0.4, useMemory: true }
+export const defaults = { topK: 4, webEnabled: true, enterSend: true, simThreshold: 0.4, useMemory: true, streamEnabled: true }
 
-function load() {
+const browserStorage = globalThis.localStorage || { getItem: () => null, setItem: () => {} }
+
+export function loadSettings(storage = browserStorage) {
   try {
-    return { ...defaults, ...JSON.parse(localStorage.getItem(KEY) || '{}') }
+    return { ...defaults, ...JSON.parse(storage.getItem(KEY) || '{}') }
   } catch {
     return { ...defaults }
   }
 }
 
-export const settings = reactive(load())
+export const settings = reactive(loadSettings())
 
 export function saveSettings() {
-  localStorage.setItem(KEY, JSON.stringify(settings))
+  browserStorage.setItem(KEY, JSON.stringify(settings))
 }

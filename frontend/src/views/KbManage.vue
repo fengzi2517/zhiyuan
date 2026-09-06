@@ -139,13 +139,15 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
+    <div class="kb-intro"><span class="serif">一库一域</span><p>按业务主题组织资料。每个库都可以独立查看语义分布，并在问答时作为参考范围。</p></div>
+
     <el-empty v-if="!loading && !kbs.length" description="暂无向量库，点击右上角创建" />
 
     <el-row :gutter="16" v-loading="loading">
       <el-col :span="8" v-for="kb in kbs" :key="kb.id" style="margin-bottom: 16px">
         <el-card shadow="hover">
           <div style="display: flex; justify-content: space-between; align-items: center">
-            <b style="font-size: 15px">{{ kb.name }}</b>
+            <div class="kb-name"><span class="kb-index">{{ String(kb.id).padStart(2, '0') }}</span><b>{{ kb.name }}</b></div>
             <div>
               <el-button type="primary" size="small" text @click="showViz(kb)">可视化</el-button>
               <el-button type="danger" size="small" text @click="onDel(kb)">删除</el-button>
@@ -195,6 +197,9 @@ onBeforeUnmount(() => {
 <style scoped>
 .kb-card { animation: rise 0.4s ease both; }
 .card-title { font-size: 15px; font-weight: 700; color: var(--ink); letter-spacing: 0.08em; }
+.kb-intro { display:flex; align-items:baseline; gap:16px; padding:8px 4px 20px; }
+.kb-intro span { color:var(--seal); font-size:15px; font-weight:700; letter-spacing:.16em; flex-shrink:0; }.kb-intro p { color:var(--ink-3); font-size:12px; }
+.kb-name { display:flex; align-items:center; gap:10px; }.kb-name b { font-size:15px; }.kb-index { color:var(--seal); font:11px/1 Georgia,serif; border-right:1px solid var(--hairline); padding-right:9px; }
 
 /* 可视化图表：宽度占满，高度由 JS 按窗口动态计算（见 chartHeight） */
 .viz-chart { width: 100%; }
