@@ -5,6 +5,7 @@ __pycache__/
 uploads/
 .trae/
 .worktrees/
+.superpowers/
 .pytest_cache/
 .hf-cache/
 FlagEmbedding/
