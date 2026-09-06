@@ -195,6 +195,39 @@ def get_document_content(doc_id: int) -> dict | None:
                 "content": d.content or "", "status": d.status,
                 "error_message": d.error_message or ""}
 
+
+def get_document_file_info(doc_id: int) -> dict | None:
+    with Session() as s:
+        document = s.get(Document, doc_id)
+        if not document:
+            return None
+        return {
+            "id": document.id, "filename": document.filename,
+            "storage_path": document.storage_path or "", "status": document.status,
+        }
+
+
+def get_chunk_context(doc_id: int, chunk_id: int) -> dict | None:
+    with Session() as s:
+        row = (
+            s.query(Chunk, Document)
+            .join(Document, Document.id == Chunk.doc_id)
+            .filter(Chunk.id == chunk_id, Chunk.doc_id == doc_id)
+            .first()
+        )
+        if not row:
+            return None
+        chunk, document = row
+        return {
+            "document": {"id": document.id, "filename": document.filename},
+            "chunk": {
+                "id": chunk.id, "content": chunk.content,
+                "page_start": chunk.page_start, "page_end": chunk.page_end,
+                "section": chunk.section or "", "start_char": chunk.start_char,
+                "end_char": chunk.end_char,
+            },
+        }
+
 def get_kb_chunks_for_viz(kb_id: int | None, limit: int = 3000) -> list[dict]:
     """取库内向量块（含原文与文档名）供 PCA 可视化；大库按最新截断采样"""
     with Session() as s:

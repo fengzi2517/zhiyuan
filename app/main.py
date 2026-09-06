@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse
+from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
@@ -9,12 +11,14 @@ from .db import (init_db, create_document, list_documents, set_status, Document,
                  Session, get_history, save_message,
                  create_kb, list_kbs, delete_kb,
                  list_sessions, get_session_messages, update_message, delete_session,
-                 get_memory, save_memory, has_documents, search_chunk_sources)
+                 get_memory, save_memory, has_documents, search_chunk_sources,
+                 get_chunk_context, get_document_file_info)
 from .llm import update_memory, understand_structured, chat as llm_chat, chat_stream as llm_chat_stream
 from .ingest import process_file
 from .search import web_search
 from .chat_service import ChatService
 from .sse import encode_sse
+from .config import UPLOAD_DIR
 
 chat_service = ChatService(
     understand=understand_structured,
@@ -87,6 +91,33 @@ def api_doc_content(doc_id: int):
     if content is None:
         raise HTTPException(status_code=404, detail="文档不存在")
     return content
+
+
+@app.get("/documents/{doc_id}/chunks/{chunk_id}/context")
+def api_chunk_context(doc_id: int, chunk_id: int):
+    context = get_chunk_context(doc_id, chunk_id)
+    if context is None:
+        raise HTTPException(status_code=404, detail="引用位置不存在")
+    return context
+
+
+def resolve_document_path(base_dir: str | Path, doc_id: int, stored_path: str) -> Path:
+    expected_dir = (Path(base_dir) / str(doc_id)).resolve()
+    candidate = Path(stored_path).resolve()
+    if candidate.parent != expected_dir or not candidate.is_file():
+        raise HTTPException(status_code=409, detail="文档原件路径无效，请重新入库")
+    return candidate
+
+
+@app.get("/documents/{doc_id}/original")
+def api_document_original(doc_id: int):
+    info = get_document_file_info(doc_id)
+    if info is None:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    if not info["storage_path"]:
+        raise HTTPException(status_code=409, detail="旧文档没有原件定位信息，请重新入库")
+    path = resolve_document_path(UPLOAD_DIR, doc_id, info["storage_path"])
+    return FileResponse(path, filename=info["filename"])
 
 @app.get("/kbs/{kb_id}/vectors")
 def api_kb_vectors(kb_id: Optional[int] = None):
