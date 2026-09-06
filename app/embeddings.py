@@ -50,3 +50,14 @@ def rerank(query: str, docs: list[str]) -> list[float] | None:
         return None
     scores = m.predict([(query, d) for d in docs])
     return [float(s) for s in scores]
+
+
+def rerank_sources(query: str, sources: list[dict]) -> list[dict]:
+    """Rerank structured results while preserving their location metadata."""
+    scores = rerank(query, [source["content"] for source in sources])
+    if scores is None:
+        return sources
+    ranked = []
+    for source, score in zip(sources, scores):
+        ranked.append({**source, "score": score})
+    return sorted(ranked, key=lambda source: source["score"], reverse=True)

@@ -241,6 +241,47 @@ def search_chunks_with_scores(question: str, kb_id: int | None = None, top_k: in
         rows = s.execute(_text(sql), params).all()
     return [(r[0], float(r[1])) for r in rows]
 
+
+def search_chunk_sources(question: str, kb_id: int | None = None, top_k: int = 8) -> list[dict]:
+    """Vector retrieval with stable document and location metadata."""
+    from .embeddings import embed_texts
+    from sqlalchemy import text as _text
+
+    qe = embed_texts([question], is_query=True)[0]
+    sql = (
+        "SELECT c.id, c.doc_id, d.filename, c.content, c.page_start, c.page_end, "
+        "c.section, c.start_char, c.end_char, "
+        "1 - (c.embedding <=> CAST(:qe AS vector)) AS sim "
+        "FROM chunks c LEFT JOIN documents d ON d.id = c.doc_id"
+    )
+    params = {"qe": str(qe), "k": top_k}
+    if kb_id is not None:
+        sql += " WHERE c.kb_id = :kb"
+        params["kb"] = kb_id
+    sql += " ORDER BY c.embedding <=> CAST(:qe AS vector) LIMIT :k"
+    with Session() as session:
+        rows = session.execute(_text(sql), params).all()
+
+    results = []
+    for row in rows:
+        page_start, page_end = row[4], row[5]
+        if page_start and page_end and page_start != page_end:
+            location = f"第 {page_start}–{page_end} 页"
+        elif page_start:
+            location = f"第 {page_start} 页"
+        elif row[6]:
+            location = row[6]
+        else:
+            location = f"字符 {row[7] or 0}–{row[8] or 0}"
+        results.append({
+            "chunk_id": row[0], "document_id": row[1],
+            "title": row[2] or f"文档 {row[1]}", "content": row[3],
+            "page_start": page_start, "page_end": page_end, "section": row[6] or "",
+            "start_char": row[7], "end_char": row[8],
+            "location": location, "score": float(row[9]),
+        })
+    return results
+
 # ---------- 会话长期记忆（分层记忆：摘要 + 事实要点） ----------
 class SessionMemory(Base):
     __tablename__ = "session_memories"
