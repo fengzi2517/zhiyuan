@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, BackgroundTasks, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
@@ -9,10 +10,11 @@ from .db import (init_db, create_document, list_documents, set_status, Document,
                  create_kb, list_kbs, delete_kb,
                  list_sessions, get_session_messages, update_message, delete_session,
                  get_memory, save_memory, has_documents, search_chunk_sources)
-from .llm import update_memory, understand_structured, chat as llm_chat
+from .llm import update_memory, understand_structured, chat as llm_chat, chat_stream as llm_chat_stream
 from .ingest import process_file
 from .search import web_search
 from .chat_service import ChatService
+from .sse import encode_sse
 
 chat_service = ChatService(
     understand=understand_structured,
@@ -20,6 +22,7 @@ chat_service = ChatService(
     search_kb=search_chunk_sources,
     search_web=web_search,
     generate=lambda prompt: llm_chat([{"role": "user", "content": prompt}]),
+    stream_generate=lambda prompt: llm_chat_stream([{"role": "user", "content": prompt}]),
 )
 
 MAX_UPLOAD_SIZE = 20 * 1024 * 1024   # 20MB
@@ -166,8 +169,6 @@ def _refresh_memory(session_id: str, question: str, answer: str):
 
 @app.post("/chat")
 def chat(req: ChatReq, background: BackgroundTasks):
-    import time as _time
-    t0 = _time.perf_counter()
     # 1) 取会话历史与长期记忆
     history = get_history(req.session_id, limit=6)
     memory = get_memory(req.session_id) if req.use_memory else None
@@ -205,6 +206,32 @@ def chat(req: ChatReq, background: BackgroundTasks):
         "sources": metadata["sources"],
         "status": out.status,
     }
+
+
+@app.post("/chat/stream")
+def chat_stream(req: ChatReq, background: BackgroundTasks):
+    history = get_history(req.session_id, limit=6)
+    memory = get_memory(req.session_id) if req.use_memory else None
+
+    def events():
+        for event in chat_service.run_stream(
+            req.question, history=history, memory=memory, kb_id=req.kb_id,
+            top_k=req.top_k, web_enabled=req.web_enabled,
+            sim_threshold=req.sim_threshold,
+        ):
+            if event["event"] == "done":
+                result = event["data"]
+                user_id = save_message(req.session_id, "user", req.question)
+                assistant_id = save_message(req.session_id, "assistant", result["answer"], result)
+                result["message_ids"] = {"user": user_id, "assistant": assistant_id}
+                if req.use_memory:
+                    background.add_task(_refresh_memory, req.session_id, req.question, result["answer"])
+            yield encode_sse(event["event"], event["data"])
+
+    return StreamingResponse(
+        events(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 # ---------- 会话历史管理 ----------
 @app.get("/sessions")

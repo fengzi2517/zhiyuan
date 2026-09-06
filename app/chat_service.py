@@ -28,12 +28,14 @@ class ChatService:
         search_kb: Callable[..., list[dict]],
         search_web: Callable[..., list[dict]],
         generate: Callable[[str], str],
+        stream_generate: Callable[[str], Any] | None = None,
     ):
         self._understand = understand
         self._has_knowledge = has_knowledge
         self._search_kb = search_kb
         self._search_web = search_web
         self._generate = generate
+        self._stream_generate = stream_generate
 
     def run(
         self,
@@ -85,6 +87,74 @@ class ChatService:
             trace=trace,
             elapsed_ms=round((time.perf_counter() - started) * 1000),
         )
+
+    def run_stream(self, question: str, **options):
+        """Yield protocol-neutral events while the upstream model emits tokens."""
+        started = time.perf_counter()
+        trace: list[dict[str, Any]] = []
+        try:
+            yield {"event": "status", "data": {"phase": "understanding", "label": "理解问题"}}
+            history = options.get("history") or []
+            result = self._understand(question, history)
+            has_kb = self._has_knowledge(options.get("kb_id"))
+            decision = decide_route(result, RouteContext(has_kb, options.get("web_enabled", True)))
+            trace.extend([
+                {"stage": "understand", "label": "理解问题", "intent": result.semantic_intent,
+                 "reason": result.reason},
+                {"stage": "route", "label": "选择处理方式", "route": decision.route,
+                 "reason": decision.reason},
+            ])
+            yield {"event": "route", "data": {
+                "semantic_intent": result.semantic_intent, "route": decision.route,
+                "reason": decision.reason,
+            }}
+
+            sources: list[Source] = []
+            top_k = options.get("top_k", 4)
+            if decision.needs_kb:
+                rows = self._search_kb(result.query, options.get("kb_id"), max(top_k, 8))
+                threshold = options.get("sim_threshold", 0.4)
+                rows = [row for row in rows if row.get("score", 0) >= threshold][:top_k]
+                sources.extend(_kb_sources(rows))
+                trace.append({"stage": "retrieve", "label": "检索知识库", "count": len(rows)})
+            if decision.needs_web:
+                rows = self._search_web(result.query, max_results=3)
+                sources.extend(_web_sources(rows))
+                trace.append({"stage": "web_search", "label": "检索网络", "count": len(rows)})
+
+            numbered = number_sources(sources)
+            prompt = _build_prompt(question, history, options.get("memory"), numbered)
+            stream = self._stream_generate(prompt) if self._stream_generate else iter([self._generate(prompt)])
+            tokens: list[str] = []
+            try:
+                for token in stream:
+                    if not token:
+                        continue
+                    tokens.append(token)
+                    yield {"event": "token", "data": {"text": token}}
+            finally:
+                close = getattr(stream, "close", None)
+                if close:
+                    close()
+
+            answer = "".join(tokens)
+            if numbered:
+                answer, numbered = validate_answer_citations(answer, numbered)
+            trace.append({"stage": "generate", "label": "生成回答"})
+            elapsed_ms = round((time.perf_counter() - started) * 1000)
+            yield {"event": "sources", "data": [source.model_dump() for source in numbered]}
+            yield {"event": "trace", "data": trace}
+            yield {"event": "done", "data": {
+                "answer": answer, "semantic_intent": result.semantic_intent,
+                "route": decision.route, "sources": [source.model_dump() for source in numbered],
+                "trace": trace, "elapsed_ms": elapsed_ms, "status": "complete",
+            }}
+        except GeneratorExit:
+            raise
+        except Exception as exc:
+            yield {"event": "error", "data": {
+                "message": f"回答生成失败：{type(exc).__name__}: {exc}", "status": "error",
+            }}
 
 
 def _kb_sources(rows: list[dict]) -> list[Source]:

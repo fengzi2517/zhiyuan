@@ -18,6 +18,22 @@ def chat(messages: list[dict], retries: int = 3) -> str:
                 raise
             time.sleep(10 * (attempt + 1))   # 等 10s / 20s 再试
 
+
+def chat_stream(messages: list[dict]):
+    """Yield text deltas from an OpenAI-compatible streaming completion."""
+    response = _client.chat.completions.create(
+        model=config.LLM_MODEL, messages=messages, stream=True,
+    )
+    try:
+        for chunk in response:
+            delta = chunk.choices[0].delta.content if chunk.choices else None
+            if delta:
+                yield delta
+    finally:
+        close = getattr(response, "close", None)
+        if close:
+            close()
+
 def _parse_json(text: str) -> dict | None:
     """容错解析 LLM 输出的 JSON（截取首个 {...} 块）"""
     m = re.search(r"\{.*\}", text, re.S)
