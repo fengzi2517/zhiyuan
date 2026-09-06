@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, text, Index, func
+from sqlalchemy import JSON, create_engine, Column, Integer, String, DateTime, Text, text, Index, func
 from sqlalchemy.orm import declarative_base, sessionmaker
 from pgvector.sqlalchemy import Vector
 from datetime import datetime, timezone
@@ -31,6 +31,7 @@ class Document(Base):
     filename = Column(String)
     status = Column(String, default="pending")   # pending / done / failed
     content = Column(Text, default="")     # 提取的全文文本（供前端查看）
+    storage_path = Column(Text, default="")
     error_message = Column(Text, default="")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -40,6 +41,11 @@ class Chunk(Base):
     kb_id = Column(Integer, index=True)
     doc_id = Column(Integer, index=True)
     content = Column(Text)
+    page_start = Column(Integer, nullable=True)
+    page_end = Column(Integer, nullable=True)
+    section = Column(String, default="")
+    start_char = Column(Integer, nullable=True)
+    end_char = Column(Integer, nullable=True)
     embedding = Column(Vector(config.EMBEDDING_DIM))
 
 class ChatMessage(Base):
@@ -48,9 +54,33 @@ class ChatMessage(Base):
     session_id = Column(String, index=True)
     role = Column(String)          # user / assistant
     content = Column(Text)
+    semantic_intent = Column(String, default="")
+    route = Column(String, default="")
+    sources = Column(JSON, default=list)
+    trace = Column(JSON, default=list)
+    elapsed_ms = Column(Integer, nullable=True)
+    status = Column(String, default="complete")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 Index("ix_chat_messages_session_created", ChatMessage.session_id, ChatMessage.created_at)
+
+
+def metadata_migration_statements() -> list[str]:
+    """Return additive migrations for installations created by earlier releases."""
+    return [
+        "ALTER TABLE documents ADD COLUMN IF NOT EXISTS storage_path TEXT",
+        "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS page_start INTEGER",
+        "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS page_end INTEGER",
+        "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS section VARCHAR",
+        "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS start_char INTEGER",
+        "ALTER TABLE chunks ADD COLUMN IF NOT EXISTS end_char INTEGER",
+        "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS semantic_intent VARCHAR",
+        "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS route VARCHAR",
+        "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS sources JSON",
+        "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS trace JSON",
+        "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS elapsed_ms INTEGER",
+        "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'complete'",
+    ]
 
 def init_db():
     with engine.connect() as conn:
@@ -65,6 +95,8 @@ def init_db():
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_chunks_kb_id ON chunks (kb_id)"))
         conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS content TEXT"))
         conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS error_message TEXT"))
+        for statement in metadata_migration_statements():
+            conn.execute(text(statement))
         conn.commit()
     # 向量维度安全检查：不匹配时拒绝启动，避免应用启动过程静默删除业务数据
     # 注意：pgvector 的 atttypmod 即维度本身（vector(1024) → typmod=1024），
@@ -244,8 +276,22 @@ def get_session_messages(session_id: str) -> list[dict]:
         rows = (s.query(ChatMessage)
                   .filter(ChatMessage.session_id == session_id)
                   .order_by(ChatMessage.id.asc()).all())
-        return [{"id": m.id, "role": m.role, "content": m.content,
-                 "created_at": str(m.created_at)} for m in rows]
+        return [serialize_message(m) for m in rows]
+
+
+def serialize_message(message: ChatMessage) -> dict:
+    return {
+        "id": message.id,
+        "role": message.role,
+        "content": message.content,
+        "created_at": str(message.created_at),
+        "semantic_intent": message.semantic_intent or "",
+        "route": message.route or "",
+        "sources": message.sources or [],
+        "trace": message.trace or [],
+        "elapsed_ms": message.elapsed_ms,
+        "status": message.status or "complete",
+    }
 
 def update_message(msg_id: int, content: str) -> bool:
     with Session() as s:
@@ -262,9 +308,20 @@ def delete_session(session_id: str):
         s.query(SessionMemory).filter(SessionMemory.session_id == session_id).delete()
         s.commit()
 
-def save_message(session_id: str, role: str, content: str) -> int:
+def save_message(session_id: str, role: str, content: str, metadata: dict | None = None) -> int:
     with Session() as s:
-        message = ChatMessage(session_id=session_id, role=role, content=content)
+        metadata = metadata or {}
+        message = ChatMessage(
+            session_id=session_id,
+            role=role,
+            content=content,
+            semantic_intent=metadata.get("semantic_intent", ""),
+            route=metadata.get("route", ""),
+            sources=metadata.get("sources", []),
+            trace=metadata.get("trace", []),
+            elapsed_ms=metadata.get("elapsed_ms"),
+            status=metadata.get("status", "complete"),
+        )
         s.add(message)
         s.commit()
         s.refresh(message)
