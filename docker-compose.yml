@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: rag-pgvector
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+      POSTGRES_DB: rag
+    ports: ["5435:5432"]   # 本机原生 PG18 占用 5432，其他容器占用 5433/5434
+    volumes: [pgdata:/var/lib/postgresql]   # PG18+ 镜像要求挂载到 /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

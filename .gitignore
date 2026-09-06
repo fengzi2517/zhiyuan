@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+uploads/
+.trae/
+.worktrees/
+.pytest_cache/
+.hf-cache/
+FlagEmbedding/
+tmp_trace.json
+server.log
+frontend/dev.log
+frontend/node_modules/

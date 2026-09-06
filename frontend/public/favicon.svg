@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect x="4" y="4" width="56" height="56" rx="12" fill="#b04a32"/>
+  <rect x="9" y="9" width="46" height="46" rx="8" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="2"/>
+  <text x="32" y="45" text-anchor="middle" font-family="Songti SC, SimSun, serif" font-size="32" font-weight="700" fill="#fdfcf8">知</text>
+</svg>

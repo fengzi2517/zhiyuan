@@ -1,0 +1,157 @@
+/* ============================================================
+   筑知库 · 素笺墨线设计系统
+   暖纸为底 / 墨色为文 / 黛青为脉 / 印朱为点
+   ============================================================ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body, #app { height: 100%; }
+
+:root {
+  /* —— 纸墨色板 —— */
+  --paper: #f5f3ec;         /* 主背景：暖纸 */
+  --paper-2: #fdfcf8;       /* 卡片面：素笺 */
+  --paper-3: #efece2;       /* 沉降面：旧纸 */
+  --ink: #2d2a24;           /* 主文字：浓墨 */
+  --ink-2: #66625a;         /* 次文字：淡墨 */
+  --ink-3: #9a958a;         /* 弱文字：宿墨 */
+  --hairline: #e5e0d2;      /* 细线：界栏 */
+  --hairline-soft: #ece7da;
+  --accent: #3e6f68;        /* 黛青：主交互色 */
+  --accent-deep: #2e564f;
+  --accent-wash: #e4edeb;   /* 青瓷洗色 */
+  --seal: #b04a32;          /* 印朱：仅用于点睛 */
+  --gold: #ab8a52;          /* 淡金：审慎使用 */
+
+  /* —— Element Plus 主题覆写 —— */
+  --el-color-primary: var(--accent);
+  --el-color-primary-dark-2: var(--accent-deep);
+  --el-color-primary-light-3: #6a938c;
+  --el-color-primary-light-5: #93b5af;
+  --el-color-primary-light-7: #bcd4d0;
+  --el-color-primary-light-8: #d4e3e0;
+  --el-color-primary-light-9: #e9f1ef;
+  --el-color-success: #5e8a5c;
+  --el-color-success-light-9: #ebf1e8;
+  --el-color-warning: #a8834b;
+  --el-color-warning-light-9: #f5efe2;
+  --el-color-danger: var(--seal);
+  --el-color-error: var(--seal);
+  --el-color-danger-light-9: #f7ebe7;
+  --el-color-error-light-8: #f0dcd5;
+  --el-color-info: #8a8578;
+  --el-color-info-light-9: #f0eee6;
+  --el-bg-color: var(--paper-2);
+  --el-bg-color-overlay: var(--paper-2);
+  --el-fill-color-blank: var(--paper-2);
+  --el-fill-color-light: #f3f0e7;
+  --el-fill-color: var(--paper-3);
+  --el-fill-color-lighter: #f7f5ee;
+  --el-text-color-primary: var(--ink);
+  --el-text-color-regular: #4b473f;
+  --el-text-color-secondary: var(--ink-2);
+  --el-text-color-placeholder: var(--ink-3);
+  --el-border-color: var(--hairline);
+  --el-border-color-light: #e9e4d7;
+  --el-border-color-lighter: var(--hairline-soft);
+  --el-border-radius-base: 6px;
+  --el-box-shadow-light: 0 1px 3px rgba(60, 52, 32, 0.06), 0 6px 18px rgba(60, 52, 32, 0.05);
+  --el-box-shadow: 0 2px 6px rgba(60, 52, 32, 0.08), 0 10px 28px rgba(60, 52, 32, 0.07);
+  --el-font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+}
+
+body {
+  font-family: var(--el-font-family);
+  color: var(--ink);
+  background-color: var(--paper);
+  /* 纸张肌理：极淡噪点 + 顶部一线天光 */
+  background-image:
+    linear-gradient(180deg, rgba(255, 253, 246, 0.65), rgba(255, 253, 246, 0) 280px),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.32 0 0 0 0 0.24 0 0 0 0.028 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* 宋体展示字族：标题 / 印章 / 大字 */
+.serif,
+.font-serif {
+  font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", SimSun, serif;
+}
+
+/* —— 滚动条：细竹式 —— */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #d8d2c2; border-radius: 4px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background-color: #c2bba8; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* —— 动效：入笺 —— */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes seal-press {
+  0% { opacity: 0; transform: scale(1.35) rotate(-6deg); }
+  60% { opacity: 1; transform: scale(0.96) rotate(1deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+/* —— Element 细节修饰 —— */
+.el-card {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--paper-2);
+}
+.el-card__header { border-bottom: 1px solid var(--hairline-soft); }
+
+.el-button--primary {
+  --el-button-font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.el-dialog { border-radius: 14px; border: 1px solid var(--hairline); }
+.el-dialog__title { font-weight: 600; }
+
+.el-table {
+  --el-table-border-color: var(--hairline-soft);
+  --el-table-header-bg-color: var(--paper-3);
+  --el-table-header-text-color: var(--ink-2);
+  --el-table-row-hover-bg-color: #f6f3ea;
+}
+.el-table th.el-table__cell { font-weight: 600; letter-spacing: 0.04em; }
+
+.el-message-box { border-radius: 12px; }
+
+/* 聊天气泡 markdown 渲染 */
+.md-body { line-height: 1.75; word-break: break-word; font-size: 14px; }
+.md-body h1, .md-body h2, .md-body h3 {
+  margin: 14px 0 8px;
+  font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
+  font-weight: 600;
+}
+.md-body h1 { font-size: 17px; }
+.md-body h2 { font-size: 16px; }
+.md-body h3 { font-size: 15px; }
+.md-body p { margin: 7px 0; }
+.md-body ul, .md-body ol { padding-left: 20px; margin: 7px 0; }
+.md-body li { margin: 3px 0; }
+.md-body code {
+  background: var(--paper-3);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: var(--accent-deep);
+}
+.md-body blockquote {
+  border-left: 2px solid var(--gold);
+  padding: 2px 0 2px 12px;
+  margin: 8px 0;
+  color: var(--ink-2);
+  background: rgba(171, 138, 82, 0.05);
+  border-radius: 0 4px 4px 0;
+}
+.md-body table { border: 1px solid var(--hairline); border-collapse: collapse; margin: 8px 0; }
+.md-body th, .md-body td { border: 1px solid var(--hairline-soft); padding: 5px 10px; font-size: 13px; }
+.md-body th { background: var(--paper-3); }
+.md-body a { color: var(--accent); text-decoration-color: rgba(62, 111, 104, 0.35); }
+.md-body hr { border: none; border-top: 1px dashed var(--hairline); margin: 12px 0; }

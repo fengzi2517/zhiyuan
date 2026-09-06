@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+sqlalchemy
+psycopg[binary]
+pgvector
+langgraph
+openai
+tavily-python
+sentence-transformers
+torch
+rapidocr_onnxruntime
+opencv-python-headless
+pypdf
+python-docx
