@@ -8,10 +8,19 @@ from .db import (init_db, create_document, list_documents, set_status, Document,
                  Session, get_history, save_message,
                  create_kb, list_kbs, delete_kb,
                  list_sessions, get_session_messages, update_message, delete_session,
-                 get_memory, save_memory)
-from .llm import update_memory
+                 get_memory, save_memory, has_documents, search_chunk_sources)
+from .llm import update_memory, understand_structured, chat as llm_chat
 from .ingest import process_file
-from .graph import rag_graph
+from .search import web_search
+from .chat_service import ChatService
+
+chat_service = ChatService(
+    understand=understand_structured,
+    has_knowledge=has_documents,
+    search_kb=search_chunk_sources,
+    search_web=web_search,
+    generate=lambda prompt: llm_chat([{"role": "user", "content": prompt}]),
+)
 
 MAX_UPLOAD_SIZE = 20 * 1024 * 1024   # 20MB
 
@@ -163,46 +172,38 @@ def chat(req: ChatReq, background: BackgroundTasks):
     history = get_history(req.session_id, limit=6)
     memory = get_memory(req.session_id) if req.use_memory else None
 
-    # 2) RAG 编排：意图识别 → 查询改写 → 召回粗筛 → 精排 → 兜底 → 生成
+    # 2) 查询理解与执行路由在 ChatService 中集中完成
     try:
-        out = rag_graph.invoke({
-            "question": req.question,
-            "history": history,
-            "memory": memory,
-            "kb_id": req.kb_id,
-            "top_k": req.top_k,
-            "web_enabled": req.web_enabled,
-            "sim_threshold": req.sim_threshold,
-            "intent": "kb",
-            "query": req.question,
-            "candidates": [],
-            "docs": [],
-            "web_results": [],
-            "retries": 0,
-            "answer": "",
-            "trace": [],
-        })
+        out = chat_service.run(
+            req.question, history=history, memory=memory, kb_id=req.kb_id,
+            top_k=req.top_k, web_enabled=req.web_enabled,
+            sim_threshold=req.sim_threshold,
+        )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"问答编排失败：{type(e).__name__}: {e}")
-    answer = out["answer"]
+    answer = out.answer
 
     # 3) 回写会话历史，后台更新长期记忆
     user_message_id = save_message(req.session_id, "user", req.question)
-    assistant_message_id = save_message(req.session_id, "assistant", answer)
+    metadata = {
+        "semantic_intent": out.semantic_intent, "route": out.route,
+        "sources": [source.model_dump() for source in out.sources],
+        "trace": out.trace, "elapsed_ms": out.elapsed_ms, "status": out.status,
+    }
+    assistant_message_id = save_message(req.session_id, "assistant", answer, metadata)
     if req.use_memory:
         background.add_task(_refresh_memory, req.session_id, req.question, answer)
 
     return {
         "answer": answer,
         "message_ids": {"user": user_message_id, "assistant": assistant_message_id},
-        "intent": out["intent"],
-        "elapsed_ms": round((_time.perf_counter() - t0) * 1000),
-        "trace": out.get("trace", []),
-        "sources": {
-            "kb": out["docs"],
-            "web": [{"title": r["title"], "url": r["url"]}
-                    for r in out["web_results"]],
-        },
+        "intent": out.semantic_intent,
+        "semantic_intent": out.semantic_intent,
+        "route": out.route,
+        "elapsed_ms": out.elapsed_ms,
+        "trace": out.trace,
+        "sources": metadata["sources"],
+        "status": out.status,
     }
 
 # ---------- 会话历史管理 ----------

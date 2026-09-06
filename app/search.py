@@ -1,13 +1,14 @@
-from tavily import TavilyClient
+from typing import Any
 from . import config
 
 _client = None
 
-def _get_client() -> TavilyClient | None:
+def _get_client() -> Any | None:
     global _client
     if _client is None:
         if not config.TAVILY_API_KEY:
             return None   # 未配置 key，联网搜索降级为空结果
+        from tavily import TavilyClient
         _client = TavilyClient(api_key=config.TAVILY_API_KEY)
     return _client
 

@@ -3,6 +3,7 @@ import json
 import re
 from openai import OpenAI, RateLimitError
 from . import config
+from .query_understanding import QueryUnderstanding, understand_query
 
 _client = OpenAI(base_url=config.LLM_BASE_URL, api_key=config.LLM_API_KEY, timeout=60)
 
@@ -69,6 +70,38 @@ def understand(question: str, history: list[str]) -> dict:
     except Exception:
         pass
     return default
+
+
+STRUCTURED_UNDERSTAND_TMPL = """你是查询理解模块。把问题分类为：
+- chitchat：寒暄或轻量闲聊
+- create：写作、润色、改写、翻译或创作
+- knowledge：不依赖当前时间的知识解释
+- current：需要今天、最新、价格、政策等时效信息
+- mixed：同时需要用户资料和当前网络信息
+
+只输出符合下面 JSON Schema 的 JSON，不要 Markdown：
+{schema}
+
+最近对话：
+{history}
+用户问题：{question}"""
+
+
+def understand_structured(question: str, history: list[str]) -> QueryUnderstanding:
+    """Use deterministic signals first, then validate one exact JSON object."""
+    def classify(_: str) -> dict:
+        prompt = STRUCTURED_UNDERSTAND_TMPL.format(
+            schema=json.dumps(QueryUnderstanding.model_json_schema(), ensure_ascii=False),
+            history="\n".join(history[-6:]) or "（无）",
+            question=question,
+        )
+        output = chat([{"role": "user", "content": prompt}])
+        return json.loads(output)
+
+    try:
+        return understand_query(question, classify)
+    except Exception:
+        return understand_query(question)
 
 # ---------- 会话长期记忆增量更新（参考 MemGPT/mem0 分层记忆） ----------
 MEMORY_TMPL = """你是会话记忆管理器。将【现有记忆】与【新对话】合并为更新后的记忆。

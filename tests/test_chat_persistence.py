@@ -1,22 +1,16 @@
 from fastapi import BackgroundTasks
 
 from app import main
+from app.chat_service import ChatResult
 
 
 def test_chat_response_includes_persisted_message_ids(monkeypatch):
     monkeypatch.setattr(main, "get_history", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(main, "get_memory", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        main.rag_graph,
-        "invoke",
-        lambda _state: {
-            "answer": "answer",
-            "intent": "kb",
-            "trace": [],
-            "docs": [],
-            "web_results": [],
-        },
-    )
+    monkeypatch.setattr(main.chat_service, "run", lambda *_args, **_kwargs: ChatResult(
+        answer="answer", semantic_intent="knowledge", route="kb", sources=[],
+        trace=[], elapsed_ms=1,
+    ))
     ids = iter([41, 42])
     monkeypatch.setattr(main, "save_message", lambda *_args: next(ids))
 

@@ -215,6 +215,14 @@ def list_documents(kb_id: int | None = None, limit: int = 50) -> list[dict]:
                  "status": d.status, "error_message": d.error_message or ""}
                 for d in q.order_by(Document.id.desc()).limit(limit)]
 
+
+def has_documents(kb_id: int | None = None) -> bool:
+    with Session() as s:
+        query = s.query(Document.id).filter(Document.status == "done")
+        if kb_id is not None:
+            query = query.filter(Document.kb_id == kb_id)
+        return query.first() is not None
+
 def search_chunks(question: str, kb_id: int | None = None, top_k: int = 4) -> list[str]:
     from .embeddings import embed_texts
     qe = embed_texts([question], is_query=True)[0]
