@@ -184,7 +184,7 @@ def build_graph():
     g.add_edge(START, "understand")
     g.add_conditional_edges("understand", _after_understand,
                             {"chitchat": "chitchat", "web_search": "web_search",
-                             "retrieve": "retrieve"})
+                             "retrieve": "retrieve", "generate": "generate"})
     g.add_edge("retrieve", "rerank")
     g.add_conditional_edges("rerank", _after_rerank,
                             {"rewrite": "rewrite", "web_search": "web_search",

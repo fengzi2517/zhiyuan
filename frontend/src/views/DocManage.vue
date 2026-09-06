@@ -35,7 +35,6 @@ function ensurePolling() {
 
 async function refresh() {
   await refreshDocs()
-  ensurePolling()
 }
 
 async function onUpload(opt) {
