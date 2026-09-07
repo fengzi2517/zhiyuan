@@ -4,9 +4,9 @@
 
 **Goal:** 将查询语义与执行路由分离，提供带去重引用的流式回答和可恢复历史，并按双栏加引用抽屉方案优化四个桌面页面。
 
-**Architecture:** 后端新增独立的查询理解、路由策略、来源编号和问答服务模块；现有 LangGraph 只编排这些明确接口。数据库以可空字段兼容扩展元数据，FastAPI 通过 SSE 暴露流式事件；Vue 客户端用组合式模块消费事件并驱动双栏界面。
+**Architecture:** 后端新增独立的查询理解、路由策略、来源编号和问答服务模块；`ChatService` 集中编排同步与流式回答。数据库以可空字段兼容扩展元数据，FastAPI 通过 SSE 暴露流式事件；Vue 客户端用组合式模块消费事件并驱动双栏界面。
 
-**Tech Stack:** Python 3.11、FastAPI、Pydantic、LangGraph、SQLAlchemy、pgvector、OpenAI-compatible SDK、pytest、Vue 3、Element Plus、Vitest、Vite
+**Tech Stack:** Python 3.11、FastAPI、Pydantic、SQLAlchemy、pgvector、OpenAI-compatible SDK、pytest、Vue 3、Element Plus、Vitest、Vite
 
 ---
 
@@ -162,7 +162,7 @@ Commit: `feat: add structured query understanding`
 
 - [ ] **Step 1: 写路由矩阵失败测试**
 
-覆盖：闲聊与创作走 direct；current 走 web；mixed 走 hybrid；选中知识库的 knowledge 走 kb；无知识库的 knowledge 在允许联网时走 web、关闭联网时走 direct；关闭联网的 mixed 降为 kb；低置信度且有知识库时走 kb。
+覆盖：闲聊与创作走 direct；current 走 web；mixed 走 hybrid；选中知识库的 knowledge 走 kb；没有可用资料且不具时效性的 knowledge 走 direct；关闭联网的 mixed 降为 kb；低置信度且有知识库时走 kb。
 
 ```python
 def test_web_switch_is_absolute():
@@ -240,7 +240,7 @@ Expected: FAIL，服务和新状态字段不存在。
 
 - [ ] **Step 3: 最小实现**
 
-`ChatService.run()` 返回 `ChatResult`；LangGraph state 使用 `understanding` 和 `route_decision`，删除节点内分散的联网判断。上下文按编号来源构造，并要求模型只使用 `[n]` 引用。`/chat` 调用服务并保持现有字段，同时增加新字段。
+`ChatService.run()` 返回 `ChatResult`；服务统一使用 `understanding` 和 `route_decision`，删除节点内分散的联网判断。上下文按编号来源构造，并要求模型只使用 `[n]` 引用。`/chat` 调用服务并保持现有字段，同时增加新字段。
 
 - [ ] **Step 4: 验证并提交**
 

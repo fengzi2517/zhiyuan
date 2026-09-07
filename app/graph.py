@@ -25,7 +25,7 @@ class RAGState(TypedDict):
     web_results: list[dict]  # 联网搜索结果 [{title, url, content}]
     retries: int
     answer: str
-    trace: list              # 思维链轨迹 [{stage, ...}] 供前端展示
+    trace: list              # 处理过程轨迹 [{stage, ...}] 供前端展示
 
 def _timed(fn):
     """节点装饰器：记录执行耗时（ms）与时间戳，附加到 trace 条目"""

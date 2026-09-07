@@ -1,6 +1,6 @@
 # 知源 · RAG 知识库问答系统
 
-本地闭环的企业级 RAG（检索增强生成）系统：上传资料 → 语义切块 → 本地向量化 → pgvector 存储 → 智能问答（附引用来源与完整思维链）。
+本地闭环的企业级 RAG（检索增强生成）系统：上传资料 → 可定位切块 → 本地向量化 → pgvector 存储 → 智能路由 → 流式回答（附可点击编号引用）。
 
 ## 功能特性
 
@@ -8,8 +8,10 @@
 - **语义切块**：标题感知 + 句子边界 + 块间重叠，不做字符硬切
 - **多语言检索**：BGE-M3（1024 维），中英文混检，英文提问可命中中文资料
 - **两级检索**：向量召回（HNSW 索引）→ 交叉编码器精排，阈值按实测分数分布校准
-- **智能路由**：意图识别三路分发（知识库 / 联网 / 闲聊）；知识库 0 命中自动改写重试，再不足联网兜底
-- **思维链可视化**：判定理由、候选相似度、精排分数、兜底路径、各步耗时全程透明
+- **智能路由**：语义意图分为闲聊、创作、知识、时效、混合五类；执行统一映射到直接回答、知识库、网络、混合四条路径
+- **流式回答**：SSE 依次返回状态、路由、token、来源、处理过程与完成事件，可随时停止
+- **编号引用**：正文使用 `[1]`、`[2]`；相同资料复用编号，知识库引用定位原文，网络引用打开原网页
+- **过程透明**：只展示可观察的处理阶段、路由理由和耗时，不展示或声称提供模型内部思维链
 - **多轮会话**：历史持久化 + 分层长期记忆（摘要 + 事实要点），支持编辑/删除消息
 - **多库隔离**：按业务线建独立知识库；向量分布 PCA 可视化辅助核验入库质量
 - **可私有化**：向量模型/检索/存储全本地，LLM 走 OpenAI 兼容接口可随时替换为私有部署
@@ -19,14 +21,13 @@
 ```
 上传 ─► 解析(OCR) ─► 语义切块 ─► BGE-M3 向量化 ─► pgvector(HNSW)
                                                         │
-提问 ─► 意图识别 ─┬─ 闲聊 ──────────────────► 直接回答    │
-                  ├─ 时效 ─► Tavily 联网 ──────┐          │
-                  └─ 知识库 ─► 召回粗筛 ─► 精排 ┼─► LLM 生成（附来源）
-                              ▲    │0命中      │
-                              └改写重试 └─联网兜底┘
+提问 ─► 结构化语义理解 ─► 确定性路由 ─┬─ direct ────────────┐
+                                      ├─ kb ─► pgvector ────┤
+                                      ├─ web ─► Tavily ─────┼─► LLM 流式生成 ─► 编号引用
+                                      └─ hybrid ─► 两类来源 ┘
 ```
 
-技术栈：FastAPI · LangGraph · Vue 3 · Element Plus · ECharts · PostgreSQL 18 + pgvector · bge-m3 / bge-reranker-base · RapidOCR · SenseNova (OpenAI 兼容) · Tavily
+技术栈：FastAPI · Pydantic 服务编排 · Vue 3 · Element Plus · ECharts · PostgreSQL 18 + pgvector · bge-m3 / bge-reranker-base · RapidOCR · SenseNova (OpenAI 兼容) · Tavily
 
 ## 快速启动
 
@@ -80,9 +81,11 @@ npm run dev        # http://localhost:5173
 ## 使用
 
 1. 「向量库管理」新建知识库 → 「资料管理」上传文档（≤20MB）
-2. 「对话」提问：专业问题走知识库检索，时效问题自动联网，闲聊直接回答
-3. 展开思维链查看：意图判定理由 → 候选片段相似度 → 精排分数 → 兜底路径 → 各步耗时
-4. 顶栏设置可调：检索片段数 top_k、相似度阈值、联网开关
+2. 「对话」提问：普通解释和创作直接回答；资料问题检索知识库；时效问题在允许时联网；混合问题合并两类来源
+3. 点击正文中的编号或“引用 N 项”打开右侧引用抽屉；知识库资料可定位到页码、章节或字符范围
+4. “处理过程”显示用户可观察的阶段和耗时；设置中可控制检索参数、联网、流式显示和长期记忆
+
+旧版本已经入库的文档没有原件路径和精确位置字段。数据库迁移会保留这些数据，但如需页码/章节定位，请重新上传一次文档。
 
 ## 测试
 
@@ -116,9 +119,12 @@ npm run build
 | POST /upload | 上传资料（后台异步入库） |
 | GET /documents | 文档列表（含处理状态） |
 | GET /documents/{id}/content | 查看提取文本 |
+| GET /documents/{id}/chunks/{chunk_id}/context | 查看引用片段与位置 |
+| GET /documents/{id}/original | 安全读取入库原件 |
 | POST /kbs · GET /kbs · DELETE /kbs/{id} | 知识库管理 |
 | GET /kbs/{id}/vectors | 向量 PCA 可视化数据 |
 | POST /chat | 问答（answer + intent + trace + sources） |
+| POST /chat/stream | SSE 流式问答（status / route / token / sources / trace / done） |
 | GET /sessions 等 | 会话/消息/记忆管理 |
 
 完整交互文档见 `http://localhost:8000/docs`（Swagger）。
@@ -134,16 +140,17 @@ npm run build
 ## 目录结构
 
 ```
-app/            后端：parser(解析) chunker(切块) embeddings(向量化/精排)
-                graph(LangGraph 编排+trace) llm(意图/记忆) db(ORM/检索) main(API)
-frontend/src/   前端：views/Chat(对话) DocManage(资料) KbManage(向量库)
+app/            后端：query_understanding(语义) routing(路由) chat_service(问答)
+                sources(引用) sse(流协议) parser/chunker/ingest(可定位入库) db(持久化)
+frontend/src/   前端：Chat(流式对话) SourceDrawer/DocumentViewer(引用定位)
+                DocManage(资料) KbManage(向量库) SettingsDialog(设置)
 .hf-cache/      本地模型权重（离线加载）
 uploads/        上传文件暂存
 ```
 
 ## 已知限制
 
-- 端到端延迟主要取决于 LLM API（当前约 30s），建议更换低延迟模型或流式输出
+- 端到端总耗时仍主要取决于 LLM API；流式输出降低首字等待，但不会缩短模型总推理时间
 - 双模型常驻内存约 4GB，16GB 机器需避免与其他大内存进程并发
 - 依赖版本未锁定，正式部署建议生成 lock 文件
 - 当前入库任务运行在 API 进程内，服务重启可能中断处理中的文档
