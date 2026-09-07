@@ -72,4 +72,8 @@ def understand_query(
     deterministic = detect_explicit_intent(question)
     if deterministic.semantic_intent != "knowledge" or classifier is None:
         return deterministic
-    return validate_or_fallback(question, classifier(question))
+    try:
+        payload = classifier(question)
+    except Exception:
+        payload = None
+    return validate_or_fallback(question, payload)

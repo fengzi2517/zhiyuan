@@ -29,6 +29,10 @@ class ChatService:
         search_web: Callable[..., list[dict]],
         generate: Callable[[str], str],
         stream_generate: Callable[[str], Any] | None = None,
+        rerank_kb: Callable[[str, list[dict]], list[dict]] | None = None,
+        rewrite_query: Callable[[str], str] | None = None,
+        candidate_k: int = 8,
+        rerank_threshold: float = 0.3,
     ):
         self._understand = understand
         self._has_knowledge = has_knowledge
@@ -36,6 +40,10 @@ class ChatService:
         self._search_web = search_web
         self._generate = generate
         self._stream_generate = stream_generate
+        self._rerank_kb = rerank_kb
+        self._rewrite_query = rewrite_query
+        self._candidate_k = candidate_k
+        self._rerank_threshold = rerank_threshold
 
     def run(
         self,
@@ -64,10 +72,8 @@ class ChatService:
 
         sources: list[Source] = []
         if decision.needs_kb:
-            rows = self._search_kb(result.query, kb_id, max(top_k, 8))
-            rows = [row for row in rows if row.get("score", 0) >= sim_threshold][:top_k]
+            rows = self._retrieve_kb(result.query, kb_id, top_k, sim_threshold, trace)
             sources.extend(_kb_sources(rows))
-            trace.append({"stage": "retrieve", "label": "检索知识库", "count": len(rows)})
         if decision.needs_web:
             rows = self._search_web(result.query, max_results=3)
             sources.extend(_web_sources(rows))
@@ -112,11 +118,9 @@ class ChatService:
             sources: list[Source] = []
             top_k = options.get("top_k", 4)
             if decision.needs_kb:
-                rows = self._search_kb(result.query, options.get("kb_id"), max(top_k, 8))
                 threshold = options.get("sim_threshold", 0.4)
-                rows = [row for row in rows if row.get("score", 0) >= threshold][:top_k]
+                rows = self._retrieve_kb(result.query, options.get("kb_id"), top_k, threshold, trace)
                 sources.extend(_kb_sources(rows))
-                trace.append({"stage": "retrieve", "label": "检索知识库", "count": len(rows)})
             if decision.needs_web:
                 rows = self._search_web(result.query, max_results=3)
                 sources.extend(_web_sources(rows))
@@ -155,6 +159,57 @@ class ChatService:
             yield {"event": "error", "data": {
                 "message": f"回答生成失败：{type(exc).__name__}: {exc}", "status": "error",
             }}
+
+    def _retrieve_kb(
+        self,
+        query: str,
+        kb_id: int | None,
+        top_k: int,
+        sim_threshold: float,
+        trace: list[dict[str, Any]],
+    ) -> list[dict]:
+        rows = self._search_kb(query, kb_id, max(top_k, self._candidate_k))
+        rows = self._select_kb_rows(query, rows, top_k, sim_threshold, trace)
+        trace.append({"stage": "retrieve", "label": "检索知识库", "query": query, "count": len(rows)})
+        if rows or self._rewrite_query is None:
+            return rows
+
+        rewritten = self._rewrite_query(query).strip()
+        if not rewritten or rewritten == query:
+            return rows
+
+        trace.append({"stage": "rewrite", "label": "改写检索词", "query": rewritten})
+        rows = self._search_kb(rewritten, kb_id, max(top_k, self._candidate_k))
+        rows = self._select_kb_rows(rewritten, rows, top_k, sim_threshold, trace)
+        trace.append({"stage": "retrieve", "label": "重新检索知识库", "query": rewritten, "count": len(rows)})
+        return rows
+
+    def _select_kb_rows(
+        self,
+        query: str,
+        rows: list[dict],
+        top_k: int,
+        sim_threshold: float,
+        trace: list[dict[str, Any]],
+    ) -> list[dict]:
+        selected = [row for row in rows if row.get("score", 0) >= sim_threshold]
+        rerank_applied = False
+        if self._rerank_kb is not None and selected:
+            try:
+                selected = self._rerank_kb(query, selected)
+                flags = [row.get("_rerank_applied") for row in selected if "_rerank_applied" in row]
+                rerank_applied = any(flags) if flags else True
+                trace.append({
+                    "stage": "rerank", "label": "精排候选", "count": len(selected),
+                    "mode": "交叉编码器" if rerank_applied else "降级为向量相似度",
+                })
+            except Exception as exc:
+                trace.append({
+                    "stage": "rerank", "label": "精排候选",
+                    "mode": "降级为向量相似度", "error": type(exc).__name__,
+                })
+        threshold = self._rerank_threshold if rerank_applied else sim_threshold
+        return [row for row in selected if row.get("score", 0) >= threshold][:top_k]
 
 
 def _kb_sources(rows: list[dict]) -> list[Source]:

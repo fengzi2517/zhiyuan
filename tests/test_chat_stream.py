@@ -1,4 +1,5 @@
 import json
+from fastapi.testclient import TestClient
 
 from app.chat_service import ChatService
 from app.query_understanding import QueryUnderstanding
@@ -49,3 +50,42 @@ def test_stream_exception_ends_with_error_without_done():
 def test_stream_route_is_registered():
     from app.main import app
     assert "/chat/stream" in {route.path for route in app.routes}
+
+
+def test_stream_endpoint_persists_only_after_done(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "get_history", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(main, "get_memory", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main.chat_service, "run_stream", lambda *_args, **_kwargs: iter([
+        {"event": "token", "data": {"text": "答"}},
+        {"event": "done", "data": {
+            "answer": "答案", "semantic_intent": "create", "route": "direct",
+            "sources": [], "trace": [], "elapsed_ms": 5, "status": "complete",
+        }},
+    ]))
+    saved = []
+    monkeypatch.setattr(main, "save_message", lambda *args: saved.append(args) or len(saved))
+
+    response = TestClient(main.app).post("/chat/stream", json={"question": "写一段"})
+
+    assert response.status_code == 200
+    assert [row[1] for row in saved] == ["user", "assistant"]
+    assert '"message_ids":{"user":1,"assistant":2}' in response.text
+
+
+def test_stream_endpoint_does_not_persist_error(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main, "get_history", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(main, "get_memory", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main.chat_service, "run_stream", lambda *_args, **_kwargs: iter([
+        {"event": "error", "data": {"message": "failed", "status": "error"}},
+    ]))
+    saved = []
+    monkeypatch.setattr(main, "save_message", lambda *args: saved.append(args))
+
+    response = TestClient(main.app).post("/chat/stream", json={"question": "问题"})
+
+    assert response.status_code == 200
+    assert saved == []

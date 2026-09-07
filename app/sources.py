@@ -23,11 +23,14 @@ class Source(BaseModel):
 
 
 def normalize_web_url(url: str) -> str:
-    parsed = urlsplit(url.strip())
-    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+    try:
+        parsed = urlsplit(url.strip())
+        if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+            return ""
+        hostname = (parsed.hostname or "").lower()
+        port = f":{parsed.port}" if parsed.port else ""
+    except ValueError:
         return ""
-    hostname = (parsed.hostname or "").lower()
-    port = f":{parsed.port}" if parsed.port else ""
     netloc = hostname + port
     return urlunsplit((parsed.scheme.lower(), netloc, parsed.path or "/", parsed.query, ""))
 

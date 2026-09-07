@@ -119,6 +119,21 @@ def understand_structured(question: str, history: list[str]) -> QueryUnderstandi
     except Exception:
         return understand_query(question)
 
+
+REWRITE_SEARCH_TMPL = """将下面的问题改写为更适合检索知识库的中文查询。
+要求：补全省略主语，保留专有名词，只输出改写后的查询，不要解释。
+
+原问题：{question}"""
+
+
+def rewrite_for_search(question: str) -> str:
+    try:
+        output = chat([{"role": "user", "content": REWRITE_SEARCH_TMPL.format(question=question)}])
+        rewritten = (output or "").strip()
+        return rewritten or question
+    except Exception:
+        return question
+
 # ---------- 会话长期记忆增量更新（参考 MemGPT/mem0 分层记忆） ----------
 MEMORY_TMPL = """你是会话记忆管理器。将【现有记忆】与【新对话】合并为更新后的记忆。
 

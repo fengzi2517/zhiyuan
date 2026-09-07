@@ -36,7 +36,7 @@ def test_web_switch_is_absolute():
 
 def test_knowledge_route_respects_available_context():
     assert decide_route(understood("knowledge"), RouteContext(True, True)).route == "kb"
-    assert decide_route(understood("knowledge"), RouteContext(False, True)).route == "web"
+    assert decide_route(understood("knowledge"), RouteContext(False, True)).route == "direct"
     assert decide_route(understood("knowledge"), RouteContext(False, False)).route == "direct"
 
 

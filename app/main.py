@@ -13,7 +13,10 @@ from .db import (init_db, create_document, list_documents, set_status, Document,
                  list_sessions, get_session_messages, update_message, delete_session,
                  get_memory, save_memory, has_documents, search_chunk_sources,
                  get_chunk_context, get_document_file_info)
-from .llm import update_memory, understand_structured, chat as llm_chat, chat_stream as llm_chat_stream
+from . import config
+from .llm import (update_memory, understand_structured, rewrite_for_search,
+                  chat as llm_chat, chat_stream as llm_chat_stream)
+from .embeddings import rerank_sources
 from .ingest import process_file
 from .search import web_search
 from .chat_service import ChatService
@@ -27,6 +30,10 @@ chat_service = ChatService(
     search_web=web_search,
     generate=lambda prompt: llm_chat([{"role": "user", "content": prompt}]),
     stream_generate=lambda prompt: llm_chat_stream([{"role": "user", "content": prompt}]),
+    rerank_kb=rerank_sources,
+    rewrite_query=rewrite_for_search,
+    candidate_k=config.CANDIDATE_K,
+    rerank_threshold=config.RERANK_THRESHOLD,
 )
 
 MAX_UPLOAD_SIZE = 20 * 1024 * 1024   # 20MB

@@ -3,6 +3,7 @@ import pytest
 from app.query_understanding import (
     QueryUnderstanding,
     detect_explicit_intent,
+    understand_query,
     validate_or_fallback,
 )
 
@@ -35,3 +36,14 @@ def test_invalid_structured_result_falls_back_without_scraping_json():
         confidence=0.2,
         reason="结构化意图结果无效，使用安全降级",
     )
+
+
+def test_classifier_exception_falls_back_to_low_confidence():
+    def classifier(_question):
+        raise RuntimeError("model unavailable")
+
+    result = understand_query("普通知识问题", classifier)
+
+    assert result.semantic_intent == "knowledge"
+    assert result.query == "普通知识问题"
+    assert result.confidence == 0.2

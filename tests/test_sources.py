@@ -19,6 +19,10 @@ def test_web_url_fragment_is_not_part_of_source_identity():
     assert normalize_web_url("javascript:alert(1)") == ""
 
 
+def test_invalid_web_url_does_not_abort_source_normalization():
+    assert normalize_web_url("https://example.com:bad/path") == ""
+
+
 def test_invalid_citations_are_removed_and_unused_sources_are_hidden():
     answer, used = validate_answer_citations("依据[1]，补充[9]。", number_sources([kb_source(), kb_source(4)]))
 

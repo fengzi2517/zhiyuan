@@ -51,6 +51,4 @@ def decide_route(result: QueryUnderstanding, context: RouteContext) -> RouteDeci
         return _decision("kb" if context.has_kb else "direct", "联网已关闭")
     if context.has_kb:
         return _decision("kb", "知识问题使用已选知识库")
-    if context.web_enabled:
-        return _decision("web", "无知识库时使用联网检索补充事实")
-    return _decision("direct", "无知识库且联网已关闭")
+    return _decision("direct", "没有可用资料且问题不具时效性，由模型直接回答")
