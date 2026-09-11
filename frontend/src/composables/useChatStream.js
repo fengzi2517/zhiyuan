@@ -6,7 +6,7 @@ export function createSseParser(onEvent) {
   let buffer = ''
   return {
     feed(chunk) {
-      buffer += chunk.replace(/\r\n/g, '\n')
+      buffer = (buffer + chunk).replace(/\r\n/g, '\n')
       let boundary = buffer.indexOf('\n\n')
       while (boundary >= 0) {
         const frame = buffer.slice(0, boundary)
@@ -32,6 +32,13 @@ export function createChatStreamer(fetchImpl = fetch) {
       if (controller) controller.abort()
       controller = new AbortController()
       const ownController = controller
+      let reader = null
+      let terminal = false
+      const emit = event => {
+        if (ownController.signal.aborted) return
+        if (event.event === 'done' || event.event === 'error') terminal = true
+        onEvent(event)
+      }
       try {
         const response = await fetchImpl(`${API_BASE_URL}/chat/stream`, {
           method: 'POST',
@@ -40,18 +47,20 @@ export function createChatStreamer(fetchImpl = fetch) {
           signal: ownController.signal,
         })
         if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`)
-        const reader = response.body.getReader()
+        reader = response.body.getReader()
         const decoder = new TextDecoder()
-        const parser = createSseParser(onEvent)
+        const parser = createSseParser(emit)
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
           parser.feed(decoder.decode(value, { stream: true }))
         }
         parser.feed(decoder.decode())
+        if (!terminal) emit({ event: 'error', data: { code: 'stream_incomplete', message: '回答意外中断，请重试。' } })
       } catch (error) {
-        if (error.name !== 'AbortError') onEvent({ event: 'error', data: { message: error.message } })
+        if (error.name !== 'AbortError' && !terminal) emit({ event: 'error', data: { message: error.message } })
       } finally {
+        reader?.releaseLock()
         if (controller === ownController) controller = null
       }
     },
@@ -75,9 +84,9 @@ export function useChatStream() {
       if (event.event === 'sources') state.sources = event.data
       if (event.event === 'trace') state.trace = event.data
       if (event.event === 'error') { state.error = event.data.message; state.loading = false }
-      if (event.event === 'done') state.loading = false
+      if (event.event === 'done') { state.loading = false; state.content = event.data.answer }
       onEvent?.(event, state)
     })
   }
-  return { state, start, cancel: streamer.cancel }
+  return { state, start, cancel() { streamer.cancel(); state.loading = false; state.phase = 'cancelled' } }
 }

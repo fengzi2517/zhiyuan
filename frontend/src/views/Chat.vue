@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onMounted, ref } from 'vue'
+import { nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Collection, Delete, Edit, Plus, Promotion, VideoPause } from '@element-plus/icons-vue'
 import { renderSafeMarkdown } from '../security'
@@ -12,11 +12,13 @@ import SourceDrawer from '../components/SourceDrawer.vue'
 const kbs = ref([]), sessions = ref([]), messages = ref([])
 const currentSession = ref(''), selectedKb = ref(null), input = ref('')
 const sending = ref(false), listRef = ref(null), memoryVisible = ref(false)
+const historyLoading = ref(false)
 const memoryData = ref({ summary: '', facts: '' })
 const drawerOpen = ref(false), drawerSources = ref([]), activeCitation = ref(null)
 const { start: startStream, cancel: cancelStream } = useChatStream()
 const routeLabels = { direct: '直接回答', kb: '知识库', web: '网络检索', hybrid: '资料＋网络' }
-const phaseLabels = { understanding: '正在理解问题', generating: '正在组织回答' }
+const phaseLabels = { understanding: '正在理解问题', retrieving: '正在检索知识库', reranking: '正在精排资料', rewriting: '正在改写检索词', searching_web: '正在查找网络资料', generating: '正在组织回答' }
+let requestVersion = 0
 
 const newSessionId = () => `s${Date.now().toString(36)}`
 const scrollToBottom = () => nextTick(() => { if (listRef.value) listRef.value.scrollTop = listRef.value.scrollHeight })
@@ -24,19 +26,28 @@ const loadKbs = async () => { kbs.value = await listKbs() }
 const loadSessions = async () => { sessions.value = await listSessions() }
 
 async function openSession(sid) {
-  cancelStream(); sending.value = false; currentSession.value = sid
-  const rows = await getSessionMessages(sid)
-  messages.value = rows.map(row => ({
-    id: row.id, role: row.role, content: row.content, route: row.route,
-    intent: row.semantic_intent, sources: row.sources || [], trace: row.trace || [],
-    elapsedMs: row.elapsed_ms, status: row.status,
-  }))
-  drawerOpen.value = false; scrollToBottom()
+  stop(); currentSession.value = sid
+  const openingVersion = requestVersion
+  historyLoading.value = true; messages.value = []; drawerOpen.value = false
+  try {
+    const rows = await getSessionMessages(sid)
+    if (openingVersion !== requestVersion || sid !== currentSession.value) return
+    messages.value = rows.map(row => ({
+      id: row.id, role: row.role, content: row.content, route: row.route,
+      intent: row.semantic_intent, sources: row.sources || [], trace: row.trace || [],
+      elapsedMs: row.elapsed_ms, status: row.status, warnings: row.warnings || [], runId: row.run_id,
+    }))
+    scrollToBottom()
+  } catch {
+    if (openingVersion === requestVersion) ElMessage.error('会话历史加载失败，请重新打开会话。')
+  } finally {
+    if (openingVersion === requestVersion) historyLoading.value = false
+  }
 }
 
 function newChat() {
-  cancelStream(); sending.value = false; currentSession.value = newSessionId()
-  messages.value = []; drawerOpen.value = false
+  stop(); currentSession.value = newSessionId()
+  messages.value = []; drawerOpen.value = false; historyLoading.value = false
 }
 
 async function removeSession(sid) {
@@ -48,11 +59,12 @@ async function removeSession(sid) {
 
 async function send() {
   const question = input.value.trim()
-  if (!question || sending.value) return
+  if (!question || sending.value || historyLoading.value) return
+  const ownVersion = ++requestVersion
   if (!currentSession.value) currentSession.value = newSessionId()
   input.value = ''
-  const userMessage = { role: 'user', content: question }
-  const pending = { role: 'assistant', content: '', sources: [], trace: [], loading: true, phase: 'understanding' }
+  const userMessage = reactive({ role: 'user', content: question })
+  const pending = reactive({ role: 'assistant', content: '', sources: [], trace: [], warnings: [], loading: true, phase: 'understanding' })
   messages.value.push(userMessage, pending); sending.value = true; scrollToBottom()
   const payload = {
     question, session_id: currentSession.value, kb_id: selectedKb.value,
@@ -62,30 +74,43 @@ async function send() {
   if (!settings.streamEnabled) {
     try {
       const result = await chat(question, currentSession.value, { kbId: selectedKb.value, topK: settings.topK, webEnabled: settings.webEnabled, simThreshold: settings.simThreshold, useMemory: settings.useMemory })
-      Object.assign(pending, { content: result.answer, route: result.route, intent: result.semantic_intent, sources: result.sources || [], trace: result.trace || [], elapsedMs: result.elapsed_ms, loading: false, id: result.message_ids?.assistant })
+      if (ownVersion !== requestVersion) return
+      Object.assign(pending, { content: result.answer, route: result.route, intent: result.semantic_intent, sources: result.sources || [], trace: result.trace || [], elapsedMs: result.elapsed_ms, loading: false, id: result.message_ids?.assistant, warnings: result.warnings || [], runId: result.run_id })
       userMessage.id = result.message_ids?.user; loadSessions()
     } catch (error) {
-      pending.content = error.response?.data?.detail || error.message; pending.error = true
-    } finally { pending.loading = false; sending.value = false; scrollToBottom() }
+      if (ownVersion !== requestVersion) return
+      const detail = error.response?.data?.detail
+      pending.content = detail?.message || (typeof detail === 'string' ? detail : error.message); pending.error = true
+    } finally { if (ownVersion === requestVersion) { pending.loading = false; sending.value = false; scrollToBottom() } }
     return
   }
   await startStream(payload, event => {
+    if (ownVersion !== requestVersion) return
     if (event.event === 'status') pending.phase = event.data.phase
     if (event.event === 'route') { pending.route = event.data.route; pending.intent = event.data.semantic_intent }
     if (event.event === 'token') { pending.phase = 'generating'; pending.content += event.data.text }
     if (event.event === 'sources') pending.sources = event.data || []
     if (event.event === 'trace') pending.trace = event.data || []
     if (event.event === 'done') {
-      Object.assign(pending, { content: event.data.answer, sources: event.data.sources || [], trace: event.data.trace || [], elapsedMs: event.data.elapsed_ms, status: event.data.status, loading: false, id: event.data.message_ids?.assistant })
+      Object.assign(pending, { content: event.data.answer, sources: event.data.sources || [], trace: event.data.trace || [], elapsedMs: event.data.elapsed_ms, status: event.data.status, loading: false, id: event.data.message_ids?.assistant, warnings: event.data.warnings || [], runId: event.data.run_id })
       userMessage.id = event.data.message_ids?.user; loadSessions()
     }
     if (event.event === 'error') { pending.content = event.data.message || '回答生成失败'; pending.error = true; pending.loading = false }
     scrollToBottom()
   })
-  sending.value = false; pending.loading = false
+  if (ownVersion === requestVersion) { sending.value = false; pending.loading = false }
 }
 
-function stop() { cancelStream(); sending.value = false }
+function stop() {
+  requestVersion++
+  cancelStream(); sending.value = false
+  for (const message of messages.value) {
+    if (message.loading) {
+      message.loading = false; message.status = 'interrupted'
+      message.warnings = [...(message.warnings || []), '回答已停止，当前内容可能不完整。']
+    }
+  }
+}
 function renderAnswer(markdown) {
   return renderSafeMarkdown((markdown || '').replace(/\[(\d+)\]/g, '<button class="citation-mark" data-citation="$1">$1</button>'))
 }
@@ -101,11 +126,16 @@ async function saveEdit(message) {
   if (!message.editBuf?.trim()) return ElMessage.warning('内容不能为空')
   if (message.id) await editMessage(message.id, message.editBuf)
   message.content = message.editBuf; message.editing = false
+  if (message.role === 'assistant') {
+    Object.assign(message, { sources: [], trace: [], warnings: [], route: '', runId: '', status: 'edited' })
+    drawerOpen.value = false
+  }
 }
 async function showMemory() {
   memoryData.value = await getSessionMemory(currentSession.value); memoryVisible.value = true
 }
 onMounted(async () => { await Promise.all([loadKbs(), loadSessions()]); newChat() })
+onUnmounted(stop)
 </script>
 
 <template>
@@ -131,7 +161,8 @@ onMounted(async () => { await Promise.all([loadKbs(), loadSessions()]); newChat(
         </header>
 
         <div ref="listRef" class="msg-list">
-          <div v-if="!messages.length" class="empty-state">
+          <div v-if="historyLoading" class="empty-state" role="status">正在加载会话历史…</div>
+          <div v-else-if="!messages.length" class="empty-state">
             <div class="empty-overline">ASK WITH CONTEXT</div><div class="empty-mark serif">问</div>
             <h2 class="serif">问有所据，答有所源</h2>
             <p>普通问题直接回答；需要资料或时效信息时，系统会自动选择合适路径。</p>
@@ -147,6 +178,7 @@ onMounted(async () => { await Promise.all([loadKbs(), loadSessions()]); newChat(
                 <ProcessTrace v-if="message.role === 'assistant'" :trace="message.trace || []" :elapsed-ms="message.elapsedMs" :active-phase="message.loading ? phaseLabels[message.phase] : ''" />
                 <div v-if="message.role === 'user'" class="plain">{{ message.content }}</div>
                 <div v-else class="md-body" :class="{ streaming: message.loading && message.content }" v-html="renderAnswer(message.content)" @click="handleAnswerClick($event, message)"></div>
+                <div v-for="notice in message.warnings || []" :key="notice" class="answer-notice" role="status">{{ notice }}</div>
                 <div v-if="message.role === 'assistant' && (message.route || message.sources?.length)" class="answer-footer"><span v-if="message.route" class="route-badge">{{ routeLabels[message.route] || message.route }}</span><button v-if="message.sources?.length" class="source-trigger" @click="openSources(message)">引用 {{ message.sources.length }} 项</button></div>
                 <button class="edit-button" aria-label="编辑消息" @click="startEdit(message)"><el-icon><Edit /></el-icon></button>
               </template>
@@ -155,8 +187,8 @@ onMounted(async () => { await Promise.all([loadKbs(), loadSessions()]); newChat(
         </div>
 
         <footer class="input-dock">
-          <el-input v-model="input" type="textarea" :autosize="{ minRows: 1, maxRows: 5 }" resize="none" placeholder="写下你的问题…" :disabled="sending" @keydown.enter.exact.prevent="settings.enterSend && send()" />
-          <el-button v-if="sending" class="send-button stop" :icon="VideoPause" @click="stop">停止</el-button><el-button v-else type="primary" class="send-button" :icon="Promotion" @click="send">发送</el-button>
+          <el-input v-model="input" type="textarea" :autosize="{ minRows: 1, maxRows: 5 }" resize="none" placeholder="写下你的问题…" :disabled="sending || historyLoading" @keydown.enter.exact.prevent="settings.enterSend && send()" />
+          <el-button v-if="sending" class="send-button stop" :icon="VideoPause" @click="stop">停止</el-button><el-button v-else type="primary" class="send-button" :icon="Promotion" :disabled="historyLoading" @click="send">发送</el-button>
           <div class="input-note">Enter 发送 · 回答可能根据问题检索知识库或网络</div>
         </footer>
       </main>
@@ -167,6 +199,7 @@ onMounted(async () => { await Promise.all([loadKbs(), loadSessions()]); newChat(
 </template>
 
 <style scoped>
+.answer-notice { margin-top:10px; padding:9px 12px; border-left:3px solid var(--seal); background:var(--paper-2); color:var(--ink-2); font-size:12px; line-height:1.6; }
 .chat-layout{display:flex;gap:14px;height:100%;min-height:0}.session-panel{width:232px;flex:0 0 auto;display:flex;flex-direction:column;background:rgba(253,252,248,.78);border:1px solid var(--hairline);border-radius:4px 14px 14px 4px;overflow:hidden}.session-heading{padding:18px 17px 8px;display:flex;justify-content:space-between;align-items:baseline}.session-heading span{font-size:17px;font-weight:700;letter-spacing:.16em}.session-heading small{color:var(--ink-3)}.new-chat-btn{margin:7px 13px 13px;height:38px;letter-spacing:.12em}.session-list{overflow:auto;padding:0 9px 12px}.session-item{width:100%;text-align:left;border:0;border-left:2px solid transparent;background:transparent;padding:11px 12px;cursor:pointer;color:inherit;border-radius:2px 9px 9px 2px}.session-item:hover{background:var(--paper-3)}.session-item.active{background:var(--accent-wash);border-left-color:var(--accent)}.session-preview{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}.session-meta{display:flex;justify-content:space-between;margin-top:5px;color:var(--ink-3);font-size:10px}.session-del:hover{color:var(--seal)}.session-empty{text-align:center;color:var(--ink-3);padding:40px 0;font-size:12px}
 .conversation-shell{flex:1;min-width:0;display:flex;overflow:hidden;background:var(--paper-2);border:1px solid var(--hairline);border-radius:14px 4px 4px 14px;box-shadow:var(--el-box-shadow-light)}.chat-main{flex:1;min-width:0;display:flex;flex-direction:column}.chat-toolbar{height:64px;flex:0 0 auto;display:flex;align-items:center;gap:20px;padding:0 20px;border-bottom:1px solid var(--hairline-soft)}.toolbar-group{display:flex;align-items:center;gap:9px}.toolbar-label{font-size:11px;color:var(--ink-3);letter-spacing:.12em}.toolbar-spacer{flex:1}.route-policy{font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:7px;white-space:nowrap}.route-policy i{width:7px;height:7px;border-radius:50%;background:#5e8a5c;box-shadow:0 0 0 4px rgba(94,138,92,.1)}.route-policy i.off{background:var(--ink-3);box-shadow:none}
 .msg-list{flex:1;overflow:auto;padding:26px clamp(18px,4vw,58px) 18px}.empty-state{height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;animation:rise .6s ease both}.empty-overline{font:10px/1 Georgia,serif;letter-spacing:.26em;color:var(--seal)}.empty-mark{width:82px;height:82px;display:grid;place-items:center;margin:18px 0;border:1px solid rgba(176,74,50,.34);color:var(--seal);font-size:45px;transform:rotate(-2deg);background:rgba(176,74,50,.025)}.empty-state h2{font-size:22px;letter-spacing:.14em}.empty-state p{max-width:530px;color:var(--ink-2);line-height:1.8;margin-top:9px;font-size:13px}.empty-rules{display:flex;gap:8px;margin-top:24px}.empty-rules span{padding:6px 12px;border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline);color:var(--ink-2);font-size:11px}

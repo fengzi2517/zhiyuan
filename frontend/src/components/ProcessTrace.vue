@@ -10,8 +10,9 @@ const labels = { understand: '理解问题', route: '选择处理方式', retrie
       <span v-if="elapsedMs != null" class="process-time">{{ (elapsedMs / 1000).toFixed(1) }} 秒</span>
     </div>
     <div class="process-line">
-      <span v-for="(step, index) in trace" :key="index" class="process-step">
+      <span v-for="(step, index) in trace" :key="index" class="process-step" :title="step.reason || step.mode || ''">
         <i></i>{{ step.label || labels[step.stage] || step.stage }}
+        <small v-if="step.elapsed_ms != null">{{ step.elapsed_ms }} ms</small>
       </span>
       <span v-if="activePhase" class="process-step active"><i></i>{{ activePhase }}</span>
     </div>
@@ -26,6 +27,7 @@ const labels = { understand: '理解问题', route: '选择处理方式', retrie
 .process-line { display:flex; flex-wrap:wrap; gap:8px 14px; }
 .process-step { font-size:12px; color:var(--ink-2); display:flex; align-items:center; gap:5px; }
 .process-step i { width:6px; height:6px; border-radius:50%; background:#a8b9b5; }
+.process-step small { color:var(--ink-3); font-variant-numeric:tabular-nums; }
 .process-step.active i { background:var(--seal); box-shadow:0 0 0 4px rgba(176,74,50,.1); animation:pulse 1.4s infinite; }
 @keyframes pulse { 50% { transform:scale(.7); opacity:.55; } }
 </style>

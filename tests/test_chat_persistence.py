@@ -11,8 +11,7 @@ def test_chat_response_includes_persisted_message_ids(monkeypatch):
         answer="answer", semantic_intent="knowledge", route="kb", sources=[],
         trace=[], elapsed_ms=1,
     ))
-    ids = iter([41, 42])
-    monkeypatch.setattr(main, "save_message", lambda *_args: next(ids))
+    monkeypatch.setattr(main, "save_exchange", lambda *_args, **_kwargs: {"user": 41, "assistant": 42})
 
     response = main.chat(
         main.ChatReq(question="question", use_memory=False), BackgroundTasks()

@@ -1,17 +1,18 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, BackgroundTasks, HTTPException
-from fastapi.responses import StreamingResponse
 from fastapi.responses import FileResponse
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
+import logging
 
 from .db import (init_db, create_document, list_documents, set_status, Document,
                  Session, get_history, save_message,
                  create_kb, list_kbs, delete_kb,
                  list_sessions, get_session_messages, update_message, delete_session,
                  get_memory, save_memory, has_documents, search_chunk_sources,
+                 save_exchange, get_memory_snapshot, save_memory_if_current,
                  get_chunk_context, get_document_file_info)
 from . import config
 from .llm import (update_memory, understand_structured, rewrite_for_search,
@@ -19,17 +20,23 @@ from .llm import (update_memory, understand_structured, rewrite_for_search,
 from .embeddings import rerank_sources
 from .ingest import process_file
 from .search import web_search
-from .chat_service import ChatService
-from .sse import encode_sse
+from .chat_service import ChatService, SYSTEM_POLICY, WorkflowError
+from .sse import encode_sse, ClosingStreamingResponse
 from .config import UPLOAD_DIR
+
+logger = logging.getLogger(__name__)
+
+
+def generation_messages(prompt):
+    return [{"role": "system", "content": SYSTEM_POLICY}, {"role": "user", "content": prompt}]
 
 chat_service = ChatService(
     understand=understand_structured,
     has_knowledge=has_documents,
     search_kb=search_chunk_sources,
     search_web=web_search,
-    generate=lambda prompt: llm_chat([{"role": "user", "content": prompt}]),
-    stream_generate=lambda prompt: llm_chat_stream([{"role": "user", "content": prompt}]),
+    generate=lambda prompt: llm_chat(generation_messages(prompt)),
+    stream_generate=lambda prompt: llm_chat_stream(generation_messages(prompt)),
     rerank_kb=rerank_sources,
     rewrite_query=rewrite_for_search,
     candidate_k=config.CANDIDATE_K,
@@ -40,6 +47,13 @@ MAX_UPLOAD_SIZE = 20 * 1024 * 1024   # 20MB
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app_logger = logging.getLogger("app")
+    app_logger.setLevel(logging.INFO)
+    if not app_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+        app_logger.addHandler(handler)
+    app_logger.propagate = False
     init_db()
     yield
 
@@ -194,79 +208,94 @@ class ChatReq(BaseModel):
             raise ValueError("问题不能为空")
         return value
 
-def _refresh_memory(session_id: str, question: str, answer: str):
-    """后台任务：增量更新会话长期记忆（不阻塞响应）"""
+def _refresh_memory(session_id: str, question: str, answer: str, snapshot: dict):
+    """Run model work outside the transaction; discard obsolete background results."""
     try:
-        old = get_memory(session_id)
-        new = update_memory(old, question, answer)
+        current = get_memory_snapshot(session_id)
+        if current is None or current["token"] != snapshot["token"]:
+            logger.info("memory session_id=%s status=obsolete", session_id)
+            return
+        new = update_memory(snapshot["memory"], question, answer)
         if new:
-            save_memory(session_id, new["summary"], new["facts"])
-        print(f"[memory] session={session_id} updated={bool(new)}", flush=True)
-    except Exception as e:
-        print(f"[memory] ERROR {type(e).__name__}: {e}", flush=True)
+            saved = save_memory_if_current(session_id, snapshot["token"], new["summary"], new["facts"])
+            logger.info("memory session_id=%s status=%s", session_id, "saved" if saved else "obsolete")
+    except Exception as exc:
+        logger.warning("memory session_id=%s status=failed error_type=%s", session_id, type(exc).__name__)
+
+
+def _chat_options(req):
+    try:
+        history = get_history(req.session_id, limit=6)
+        memory = get_memory(req.session_id) if req.use_memory else None
+    except Exception as exc:
+        logger.warning("chat context unavailable error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="暂时无法读取会话，请稍后重试。") from exc
+    return dict(history=history, memory=memory, kb_id=req.kb_id, top_k=req.top_k,
+                web_enabled=req.web_enabled, sim_threshold=req.sim_threshold)
+
+
+def _persist_result(req, result, background):
+    capture_memory = req.use_memory and result.get("answer_mode") != "insufficient_evidence"
+    ids = save_exchange(req.session_id, req.question, result["answer"], result,
+                        capture_memory=capture_memory)
+    snapshot = ids.pop("_memory_snapshot", None)
+    if snapshot:
+        background.add_task(_refresh_memory, req.session_id, req.question,
+                            result["answer"], snapshot)
+    return ids
+
 
 @app.post("/chat")
 def chat(req: ChatReq, background: BackgroundTasks):
-    # 1) 取会话历史与长期记忆
-    history = get_history(req.session_id, limit=6)
-    memory = get_memory(req.session_id) if req.use_memory else None
-
-    # 2) 查询理解与执行路由在 ChatService 中集中完成
+    options = _chat_options(req)
     try:
-        out = chat_service.run(
-            req.question, history=history, memory=memory, kb_id=req.kb_id,
-            top_k=req.top_k, web_enabled=req.web_enabled,
-            sim_threshold=req.sim_threshold,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"问答编排失败：{type(e).__name__}: {e}")
-    answer = out.answer
-
-    # 3) 回写会话历史，后台更新长期记忆
-    user_message_id = save_message(req.session_id, "user", req.question)
-    metadata = {
-        "semantic_intent": out.semantic_intent, "route": out.route,
-        "sources": [source.model_dump() for source in out.sources],
-        "trace": out.trace, "elapsed_ms": out.elapsed_ms, "status": out.status,
-    }
-    assistant_message_id = save_message(req.session_id, "assistant", answer, metadata)
-    if req.use_memory:
-        background.add_task(_refresh_memory, req.session_id, req.question, answer)
-
-    return {
-        "answer": answer,
-        "message_ids": {"user": user_message_id, "assistant": assistant_message_id},
-        "intent": out.semantic_intent,
-        "semantic_intent": out.semantic_intent,
-        "route": out.route,
-        "elapsed_ms": out.elapsed_ms,
-        "trace": out.trace,
-        "sources": metadata["sources"],
-        "status": out.status,
-    }
+        result = chat_service.run(req.question, **options).model_dump()
+    except WorkflowError as exc:
+        raise HTTPException(status_code=502, detail=exc.data) from exc
+    except Exception as exc:
+        logger.warning("chat workflow failed error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="问答处理失败，请稍后重试。") from exc
+    try:
+        result["message_ids"] = _persist_result(req, result, background)
+    except Exception as exc:
+        logger.warning("run_id=%s persistence failed error_type=%s",
+                       result.get("run_id", ""), type(exc).__name__)
+        raise HTTPException(status_code=503, detail="回答已生成，但会话保存失败，请稍后重试。") from exc
+    return {**result, "intent": result["semantic_intent"]}
 
 
 @app.post("/chat/stream")
 def chat_stream(req: ChatReq, background: BackgroundTasks):
-    history = get_history(req.session_id, limit=6)
-    memory = get_memory(req.session_id) if req.use_memory else None
+    options = _chat_options(req)
 
     def events():
-        for event in chat_service.run_stream(
-            req.question, history=history, memory=memory, kb_id=req.kb_id,
-            top_k=req.top_k, web_enabled=req.web_enabled,
-            sim_threshold=req.sim_threshold,
-        ):
-            if event["event"] == "done":
-                result = event["data"]
-                user_id = save_message(req.session_id, "user", req.question)
-                assistant_id = save_message(req.session_id, "assistant", result["answer"], result)
-                result["message_ids"] = {"user": user_id, "assistant": assistant_id}
-                if req.use_memory:
-                    background.add_task(_refresh_memory, req.session_id, req.question, result["answer"])
-            yield encode_sse(event["event"], event["data"])
+        upstream = chat_service.run_stream(req.question, **options)
+        run_id, phase = "", "workflow"
+        try:
+            for event in upstream:
+                if event["event"] in ("route", "done"):
+                    run_id = event["data"].get("run_id", run_id)
+                if event["event"] == "done":
+                    phase = "persistence"
+                    result = event["data"]
+                    result["message_ids"] = _persist_result(req, result, background)
+                yield encode_sse(event["event"], event["data"])
+                if event["event"] in ("done", "error"):
+                    return
+            raise RuntimeError("upstream ended without terminal event")
+        except Exception as exc:
+            logger.warning("run_id=%s phase=%s error_type=%s", run_id, phase, type(exc).__name__)
+            yield encode_sse("error", {
+                "code": "persistence_failed" if phase == "persistence" else "stream_incomplete",
+                "message": "会话保存失败，请稍后重试。" if phase == "persistence" else "回答意外中断，请重试。",
+                "run_id": run_id, "status": "error",
+            })
+        finally:
+            close = getattr(upstream, "close", None)
+            if close:
+                close()
 
-    return StreamingResponse(
+    return ClosingStreamingResponse(
         events(), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

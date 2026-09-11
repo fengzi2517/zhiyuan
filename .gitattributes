@@ -1,0 +1,2 @@
+# Keep evaluation source/data fingerprints stable across Windows and Linux checkouts.
+evaluation/** text eol=lf

@@ -1,0 +1,848 @@
+{
+  "version": "synthetic-v1",
+  "provenance": "原创虚构操作手册，仅供离线检索实验；产品名、参数与规则不描述本项目的实际功能。AI 编写，证据经脚本核验，尚未获业务人员独立标注复核。",
+  "documents": [
+    {
+      "id": "atlas",
+      "title": "Atlas 文件入库手册.md",
+      "text": "# Atlas 文件入库手册：基本约定\nAtlas 接收 PDF、DOCX、TXT 和 Markdown 文件，单个文件上限为 20 MiB。文件超过上限时返回 AT-413，不创建入库任务。扫描 PDF 先执行 OCR，再按页保留识别文本；CSV 和 XLSX 不在本版支持范围内。\n\n# Atlas 文件入库手册：异常处理\nAtlas 的解析失败任务保留原文件七天，供管理员重新提交。若连续两次 OCR 都未提取到文本，任务标为 failed_empty，界面提示上传清晰原件。文件成功处理后才对检索可见，处理中状态不表示内容已经可搜索。"
+    },
+    {
+      "id": "boreal",
+      "title": "Boreal 接口凭据规范.md",
+      "text": "# Boreal 接口凭据规范：基本约定\nBoreal 的服务凭据每九十天轮换一次，采用新旧双密钥过渡。新密钥验证通过后，旧密钥最多保留二十四小时。凭据只从运行环境读取，不能写入源码、镜像层、请求日志或追踪记录。\n\n# Boreal 接口凭据规范：异常处理\nBoreal 的 BK-401 表示密钥失效，客户端应停止自动重试并通知管理员。审计记录仅保留密钥指纹的末六位、调用时间和服务名称，不保留密钥正文。凭据意外泄露时立即吊销，而不是等到下一次定期轮换。"
+    },
+    {
+      "id": "cedar",
+      "title": "Cedar 外部请求策略.md",
+      "text": "# Cedar 外部请求策略：基本约定\nCedar 对上游返回的 429、502 和 503 执行最多三次总尝试，采用带随机抖动的指数退避。整个调用链的总时间预算为四十五秒；剩余预算不足时直接结束，不再等待下一轮退避。普通参数错误不重试。\n\n# Cedar 外部请求策略：异常处理\nCedar 把 CD-DEADLINE 作为总预算耗尽的错误码。连续五次请求失败会打开熔断器，三十秒后只放行一个探测请求。探测成功才恢复普通流量；失败则继续熔断，避免大量请求同时冲击异常上游。"
+    },
+    {
+      "id": "delta",
+      "title": "Delta 数据备份操作规程.md",
+      "text": "# Delta 数据备份操作规程：基本约定\nDelta 每六小时生成一次加密全量备份，备份保留十四天，密钥和备份文件分开存储。每周从随机选取的备份恢复到隔离实例，并核对文档数量与内容校验和。仅有备份成功日志不能替代恢复演练。\n\n# Delta 数据备份操作规程：异常处理\nDelta 的 DL-RESTORE-MISMATCH 表示恢复后校验和不一致，值班人员须隔离该备份并回退到上一个通过验证的备份。恢复实例未完成校验前禁止接入业务流量。演练报告必须记录备份时间、恢复耗时和校验结果。"
+    },
+    {
+      "id": "ember",
+      "title": "Ember 回答缓存约定.md",
+      "text": "# Ember 回答缓存约定：基本约定\nEmber 的缓存键由租户标识、知识库标识、知识库版本、规范化问题和模型版本组成。缓存有效期为十五分钟。任何文档新增、删除或替换都增加知识库版本，旧版本缓存不再命中，防止回答引用已删除资料。\n\n# Ember 回答缓存约定：异常处理\nEmber 对无资料命中的回答不写入共享缓存。EM-CACHE-BYPASS 表示本次跳过缓存，通常出现在用户开启临时会话时。缓存命中仍需检查调用者当前权限，权限变化不能依靠十五分钟过期时间自然生效。"
+    },
+    {
+      "id": "fjord",
+      "title": "Fjord 知识库权限设计.md",
+      "text": "# Fjord 知识库权限设计：基本约定\nFjord 将知识库角色划分为 reader、editor 和 owner。reader 只能提问和读取获授权原文，editor 可额外上传与删除资料，owner 可管理成员。每次检索都由服务端添加租户过滤，前端传来的租户标识不能作为授权依据。\n\n# Fjord 知识库权限设计：异常处理\nFjord 返回 FJ-403 时，表示用户没有目标知识库的访问权限。原件下载、引用上下文和向量可视化接口使用与问答相同的权限检查。移除成员后立即失去访问权限，不等待其浏览器会话结束。"
+    },
+    {
+      "id": "garnet",
+      "title": "Garnet 检索配置参考.md",
+      "text": "# Garnet 检索配置参考：基本约定\nGarnet 的候选召回数固定为四十，交叉编码器对候选逐对打分，再保留前五段进入生成上下文。候选数与最终上下文段数分别配置，不能混用。仅看相似度分数无法证明答案正确，必须用带证据标注的问题集验证。\n\n# Garnet 检索配置参考：异常处理\nGarnet 在 GR-RERANK-OFF 出现时退化为向量排序，并在追踪里标注降级。质量评测禁止把这种降级计入重排实验。评测结果需分别报告检索召回、排序质量和答案忠实度，不用一个含糊的准确率概括所有环节。"
+    },
+    {
+      "id": "harbor",
+      "title": "Harbor 入库任务执行协议.md",
+      "text": "# Harbor 入库任务执行协议：基本约定\nHarbor 工作进程领取任务时持有六十秒租约，每二十秒续约。进程退出后，租约到期的任务才允许其他工作进程领取。单个任务最多重试三次，超出次数后进入人工处理队列，不能永久停留在处理中状态。\n\n# Harbor 入库任务执行协议：异常处理\nHarbor 用知识库标识、文件内容哈希和索引版本生成幂等键。HB-DUPLICATE 表示相同版本资料已完成入库，返回已有文档标识而不是重复生成向量。任务最终提交时再次检查租约所有者，防止过期工作进程写入结果。"
+    },
+    {
+      "id": "iris",
+      "title": "Iris 文档切块规则.md",
+      "text": "# Iris 文档切块规则：基本约定\nIris 以五百字符为目标块长度，保留一百字符左右的句子重叠。标题归属后续正文，页码与章节路径写入块元数据。英文句号和中文句末标点均作为分句依据，没有标点的超长文本使用字符级保底切分。\n\n# Iris 文档切块规则：异常处理\nIris 的 IR-EMPTY 指没有可索引文本，任务标为失败并显示原因。切块算法版本发生变化时必须重建索引，旧版本查询结果不能与新版本混作同一次实验。比较不同切块方式时，需要保持问题集、模型和召回参数一致。"
+    },
+    {
+      "id": "jade",
+      "title": "Jade 服务告警说明.md",
+      "text": "# Jade 服务告警说明：基本约定\nJade 在检索延迟 p95 连续五分钟超过两秒时触发告警。采样不包含模型冷启动，但冷启动时间单独记录。每条追踪必须有请求标识、知识库标识、阶段名称和耗时，用户的完整问题与文档正文不写入普通日志。\n\n# Jade 服务告警说明：异常处理\nJade 的 JD-NO-SOURCES 表示检索完成但没有返回资料，这个事件单独计数，不等同于服务故障。值班人员结合问题类别和空检索比例判断阈值是否过严。排查首字慢时，先拆分理解、检索、重排与模型首字等待时间。"
+    },
+    {
+      "id": "kite",
+      "title": "Kite 索引发布流程.md",
+      "text": "# Kite 索引发布流程：基本约定\nKite 使用蓝绿两套索引发布新版本，新索引通过固定保留集后才切换读取指针。旧索引至少保留四十八小时，便于回滚。只变更嵌入模型时也必须重建文档向量，不能只换查询向量，因为不同模型的空间并不兼容。\n\n# Kite 索引发布流程：异常处理\nKite 的 KT-DIMENSION 表示索引维度与查询模型不一致，应用拒绝启动并要求显式迁移。普通启动流程不删除旧文档。回滚时同时恢复模型版本、切块配置和索引读取指针，不能只恢复应用代码。"
+    },
+    {
+      "id": "lotus",
+      "title": "Lotus 会话记忆约定.md",
+      "text": "# Lotus 会话记忆约定：基本约定\nLotus 每次生成注入最近六条消息和一份最多八百字符的摘要。六条消息不等于六轮问答，成对消息通常只覆盖三轮。长期记忆用于保持对话连贯，不作为证明业务事实的外部证据；资料结论仍需有效引用。\n\n# Lotus 会话记忆约定：异常处理\nLotus 的 LT-MEMORY-STALE 表示用户修改历史后摘要待重算，这时暂不注入旧摘要。删除会话时，消息与长期记忆在同一事务内删除。关闭记忆开关后既不读取长期摘要，也不调用后台摘要更新接口。"
+    }
+  ],
+  "questions": [
+    {
+      "id": "atlas-1",
+      "group": "atlas",
+      "split": "dev",
+      "category": "direct",
+      "query": "Atlas 一次能上传多大的文件？",
+      "answer": "20 MiB。",
+      "evidence": [
+        {
+          "doc_id": "atlas",
+          "quote": "单个文件上限为 20 MiB。"
+        }
+      ]
+    },
+    {
+      "id": "atlas-2",
+      "group": "atlas",
+      "split": "dev",
+      "category": "identifier",
+      "query": "AT-413 表示什么？",
+      "answer": "上传文件超出大小上限，不创建入库任务。",
+      "evidence": [
+        {
+          "doc_id": "atlas",
+          "quote": "文件超过上限时返回 AT-413，不创建入库任务。"
+        }
+      ]
+    },
+    {
+      "id": "atlas-3",
+      "group": "atlas",
+      "split": "dev",
+      "category": "paraphrase",
+      "query": "文档处理没成功，原件过几天会清理？",
+      "answer": "七天。",
+      "evidence": [
+        {
+          "doc_id": "atlas",
+          "quote": "解析失败任务保留原文件七天"
+        }
+      ]
+    },
+    {
+      "id": "atlas-4",
+      "group": "atlas",
+      "split": "dev",
+      "category": "cross_language",
+      "query": "What happens when Atlas OCR extracts no text twice?",
+      "answer": "标为 failed_empty，提示上传清晰原件。",
+      "evidence": [
+        {
+          "doc_id": "atlas",
+          "quote": "若连续两次 OCR 都未提取到文本，任务标为 failed_empty"
+        }
+      ]
+    },
+    {
+      "id": "atlas-negative",
+      "group": "atlas",
+      "split": "dev",
+      "category": "unanswerable",
+      "query": "Atlas 的 OCR 使用哪款 GPU？",
+      "answer": "",
+      "evidence": []
+    },
+    {
+      "id": "boreal-1",
+      "group": "boreal",
+      "split": "test",
+      "category": "direct",
+      "query": "Boreal 的服务凭据多久轮换？",
+      "answer": "每九十天。",
+      "evidence": [
+        {
+          "doc_id": "boreal",
+          "quote": "服务凭据每九十天轮换一次"
+        }
+      ]
+    },
+    {
+      "id": "boreal-2",
+      "group": "boreal",
+      "split": "test",
+      "category": "identifier",
+      "query": "遇到 BK-401 该继续重试吗？",
+      "answer": "停止自动重试并通知管理员。",
+      "evidence": [
+        {
+          "doc_id": "boreal",
+          "quote": "BK-401 表示密钥失效，客户端应停止自动重试并通知管理员。"
+        }
+      ]
+    },
+    {
+      "id": "boreal-3",
+      "group": "boreal",
+      "split": "test",
+      "category": "paraphrase",
+      "query": "排查接口访问时，能把完整密钥留在审计记录里吗？",
+      "answer": "不能，只保留指纹末六位、调用时间和服务名称。",
+      "evidence": [
+        {
+          "doc_id": "boreal",
+          "quote": "审计记录仅保留密钥指纹的末六位、调用时间和服务名称，不保留密钥正文。"
+        }
+      ]
+    },
+    {
+      "id": "boreal-4",
+      "group": "boreal",
+      "split": "test",
+      "category": "cross_language",
+      "query": "How long may the old Boreal key remain after the new key is verified?",
+      "answer": "最多二十四小时。",
+      "evidence": [
+        {
+          "doc_id": "boreal",
+          "quote": "新密钥验证通过后，旧密钥最多保留二十四小时。"
+        }
+      ]
+    },
+    {
+      "id": "boreal-negative",
+      "group": "boreal",
+      "split": "test",
+      "category": "unanswerable",
+      "query": "Boreal 管理员的联系电话是什么？",
+      "answer": "",
+      "evidence": []
+    },
+    {
+      "id": "cedar-1",
+      "group": "cedar",
+      "split": "dev",
+      "category": "direct",
+      "query": "Cedar 的上游请求总预算是多少？",
+      "answer": "四十五秒。",
+      "evidence": [
+        {
+          "doc_id": "cedar",
+          "quote": "整个调用链的总时间预算为四十五秒"
+        }
+      ]
+    },
+    {
+      "id": "cedar-2",
+      "group": "cedar",
+      "split": "dev",
+      "category": "identifier",
+      "query": "CD-DEADLINE 是什么意思？",
+      "answer": "总预算耗尽。",
+      "evidence": [
+        {
+          "doc_id": "cedar",
+          "quote": "CD-DEADLINE 作为总预算耗尽的错误码"
+        }
+      ]
+    },
+    {
+      "id": "cedar-3",
+      "group": "cedar",
+      "split": "dev",
+      "category": "paraphrase",
+      "query": "外部接口连续出错后，多久会试探恢复？",
+      "answer": "三十秒后放行一个探测请求。",
+      "evidence": [
+        {
+          "doc_id": "cedar",
+          "quote": "连续五次请求失败会打开熔断器，三十秒后只放行一个探测请求。"
+        }
+      ]
+    },
+    {
+      "id": "cedar-4",
+      "group": "cedar",
+      "split": "dev",
+      "category": "cross_language",
+      "query": "How many total attempts does Cedar allow for HTTP 503?",
+      "answer": "最多三次总尝试。",
+      "evidence": [
+        {
+          "doc_id": "cedar",
+          "quote": "Cedar 对上游返回的 429、502 和 503 执行最多三次总尝试"
+        }
+      ]
+    },
+    {
+      "id": "cedar-negative",
+      "group": "cedar",
+      "split": "dev",
+      "category": "unanswerable",
+      "query": "Cedar 每月 API 采购预算是多少？",
+      "answer": "",
+      "evidence": []
+    },
+    {
+      "id": "delta-1",
+      "group": "delta",
+      "split": "test",
+      "category": "direct",
+      "query": "Delta 的备份保留多长时间？",
+      "answer": "十四天。",
+      "evidence": [
+        {
+          "doc_id": "delta",
+          "quote": "备份保留十四天"
+        }
+      ]
+    },
+    {
+      "id": "delta-2",
+      "group": "delta",
+      "split": "test",
+      "category": "identifier",
+      "query": "DL-RESTORE-MISMATCH 应如何处理？",
+      "answer": "隔离该备份，回退到上一个通过验证的备份。",
+      "evidence": [
+        {
+          "doc_id": "delta",
+          "quote": "值班人员须隔离该备份并回退到上一个通过验证的备份。"
+        }
+      ]
+    },
+    {
+      "id": "delta-3",
+      "group": "delta",
+      "split": "test",
+      "category": "paraphrase",
+      "query": "备份显示成功了，还要定期试着恢复吗？",
+      "answer": "需要，每周恢复到隔离实例并核验。",
+      "evidence": [
+        {
+          "doc_id": "delta",
+          "quote": "每周从随机选取的备份恢复到隔离实例，并核对文档数量与内容校验和。"
+        }
+      ]
+    },
+    {
+      "id": "delta-4",
+      "group": "delta",
+      "split": "test",
+      "category": "cross_language",
+      "query": "How often does Delta create an encrypted full backup?",
+      "answer": "每六小时一次。",
+      "evidence": [
+        {
+          "doc_id": "delta",
+          "quote": "Delta 每六小时生成一次加密全量备份"
+        }
+      ]
+    },
+    {
+      "id": "delta-negative",
+      "group": "delta",
+      "split": "test",
+      "category": "unanswerable",
+      "query": "Delta 的备份机房在哪个城市？",
+      "answer": "",
+      "evidence": []
+    },
+    {
+      "id": "ember-1",
+      "group": "ember",
+      "split": "dev",
+      "category": "direct",
+      "query": "Ember 回答缓存的有效期多长？",
+      "answer": "十五分钟。",
+      "evidence": [
+        {
+          "doc_id": "ember",
+          "quote": "缓存有效期为十五分钟。"
+        }
+      ]
+    },
+    {
+      "id": "ember-2",
+      "group": "ember",
+      "split": "dev",
+      "category": "identifier",
+      "query": "EM-CACHE-BYPASS 表示什么？",
+      "answer": "本次跳过缓存，通常是临时会话。",
+      "evidence": [
+        {
+          "doc_id": "ember",
+          "quote": "EM-CACHE-BYPASS 表示本次跳过缓存，通常出现在用户开启临时会话时。"
+        }
+      ]
+    },
+    {
+      "id": "ember-3",
+      "group": "ember",
+      "split": "dev",
+      "category": "paraphrase",
+      "query": "资料删掉后怎样避免继续给出旧缓存答案？",
+      "answer": "变更知识库版本，使旧缓存不再命中。",
+      "evidence": [
+        {
+          "doc_id": "ember",
+          "quote": "任何文档新增、删除或替换都增加知识库版本，旧版本缓存不再命中"
+        }
+      ]
+    },
+    {
+      "id": "ember-4",
+      "group": "ember",
+      "split": "dev",
+      "category": "cross_language",
+      "query": "Does an Ember cache hit still require a permission check?",
+      "answer": "仍需检查当前权限。",
+      "evidence": [
+        {
+          "doc_id": "ember",
+          "quote": "缓存命中仍需检查调用者当前权限"
+        }
+      ]
+    },
+    {
+      "id": "ember-negative",
+      "group": "ember",
+      "split": "dev",
+      "category": "unanswerable",
+      "query": "Ember 缓存服务器有多少 GB 内存？",
+      "answer": "",
+      "evidence": []
+    },
+    {
+      "id": "fjord-1",
+      "group": "fjord",
+      "split": "test",
+      "category": "direct",
+      "query": "Fjord 的 reader 可以做什么？",
+      "answer": "只能提问和读取获授权原文。",
+      "evidence": [
+        {
+          "doc_id": "fjord",
+          "quote": "reader 只能提问和读取获授权原文"
+        }
+      ]
+    },
+    {
+      "id": "fjord-2",
+      "group": "fjord",
+      "split": "test",
+      "category": "identifier",
+      "query": "FJ-403 是什么错误？",
+      "answer": "没有目标知识库的访问权限。",
+      "evidence": [
+        {
+          "doc_id": "fjord",
+          "quote": "FJ-403 时，表示用户没有目标知识库的访问权限。"
+        }
+      ]
+    },
+    {
+      "id": "fjord-3",
+      "group": "fjord",
+      "split": "test",
+      "category": "paraphrase",
+      "query": "用户还能看对话，引用原文件的接口就不用再验权了吗？",
+      "answer": "仍需相同权限检查。",
+      "evidence": [
+        {
+          "doc_id": "fjord",
+          "quote": "原件下载、引用上下文和向量可视化接口使用与问答相同的权限检查。"
+        }
+      ]
+    },
+    {
+      "id": "fjord-4",
+      "group": "fjord",
+      "split": "test",
+      "category": "cross_language",
+      "query": "Who may manage knowledge base members in Fjord?",
+      "answer": "owner。",
+      "evidence": [
+        {
+          "doc_id": "fjord",
+          "quote": "owner 可管理成员。"
+        }
+      ]
+    },
+    {
+      "id": "fjord-negative",
+      "group": "fjord",
+      "split": "test",
+      "category": "unanswerable",
+      "query": "Fjord 的登录密码最少需要几位？",
+      "answer": "",
+      "evidence": []
+    },
+    {
+      "id": "garnet-1",
+      "group": "garnet",
+      "split": "dev",
+      "category": "direct",
+      "query": "Garnet 向量召回多少候选？",
+      "answer": "四十。",
+      "evidence": [
+        {
+          "doc_id": "garnet",
+          "quote": "Garnet 的候选召回数固定为四十"
+        }
+      ]
+    },
+    {
+      "id": "garnet-2",
+      "group": "garnet",
+      "split": "dev",
+      "category": "identifier",
+      "query": "GR-RERANK-OFF 出现后采用什么排序？",
+      "answer": "退化为向量排序并标注降级。",
+      "evidence": [
+        {
+          "doc_id": "garnet",
+          "quote": "GR-RERANK-OFF 出现时退化为向量排序，并在追踪里标注降级。"
+        }
+      ]
+    },
+    {
+      "id": "garnet-3",
+      "group": "garnet",
+      "split": "dev",
+      "category": "paraphrase",
+      "query": "重排没成功的请求还能算进重排效果实验吗？",
+      "answer": "不能。",
+      "evidence": [
+        {
+          "doc_id": "garnet",
+          "quote": "质量评测禁止把这种降级计入重排实验。"
+        }
+      ]
+    },
+    {
+      "id": "garnet-4",
+      "group": "garnet",
+      "split": "dev",
+      "category": "cross_language",
+      "query": "How many passages does Garnet keep for the generation context?",
+      "answer": "前五段。",
+      "evidence": [
+        {
+          "doc_id": "garnet",
+          "quote": "再保留前五段进入生成上下文。"
+        }
+      ]
+    },
+    {
+      "id": "garnet-negative",
+      "group": "garnet",
+      "split": "dev",
+      "category": "unanswerable",
+      "query": "Garnet 使用哪个具体型号的交叉编码器？",
+      "answer": "",
+      "evidence": []
+    },
+    {
+      "id": "harbor-1",
+      "group": "harbor",
+      "split": "test",
+      "category": "direct",
+      "query": "Harbor 任务的租约多长？",
+      "answer": "六十秒。",
+      "evidence": [
+        {
+          "doc_id": "harbor",
+          "quote": "持有六十秒租约"
+        }
+      ]
+    },
+    {
+      "id": "harbor-2",
+      "group": "harbor",
+      "split": "test",
+      "category": "identifier",
+      "query": "HB-DUPLICATE 应返回什么？",
+      "answer": "已有文档标识。",
+      "evidence": [
+        {
+          "doc_id": "harbor",
+          "quote": "HB-DUPLICATE 表示相同版本资料已完成入库，返回已有文档标识而不是重复生成向量。"
+        }
+      ]
+    },
+    {
+      "id": "harbor-3",
+      "group": "harbor",
+      "split": "test",
+      "category": "paraphrase",
+      "query": "工作进程失联后，别的进程何时能接手？",
+      "answer": "租约到期后。",
+      "evidence": [
+        {
+          "doc_id": "harbor",
+          "quote": "进程退出后，租约到期的任务才允许其他工作进程领取。"
+        }
+      ]
+    },
+    {
+      "id": "harbor-4",
+      "group": "harbor",
+      "split": "test",
+      "category": "cross_language",
+      "query": "Which fields form the Harbor ingestion idempotency key?",
+      "answer": "知识库标识、文件内容哈希、索引版本。",
+      "evidence": [
+        {
+          "doc_id": "harbor",
+          "quote": "Harbor 用知识库标识、文件内容哈希和索引版本生成幂等键。"
+        }
+      ]
+    },
+    {
+      "id": "harbor-negative",
+      "group": "harbor",
+      "split": "test",
+      "category": "unanswerable",
+      "query": "Harbor 工作进程使用什么操作系统？",
+      "answer": "",
+      "evidence": []
+    },
+    {
+      "id": "iris-1",
+      "group": "iris",
+      "split": "dev",
+      "category": "direct",
+      "query": "Iris 的目标块长度是多少？",
+      "answer": "五百字符。",
+      "evidence": [
+        {
+          "doc_id": "iris",
+          "quote": "Iris 以五百字符为目标块长度"
+        }
+      ]
+    },
+    {
+      "id": "iris-2",
+      "group": "iris",
+      "split": "dev",
+      "category": "identifier",
+      "query": "IR-EMPTY 代表什么状态？",
+      "answer": "没有可索引文本，任务失败并显示原因。",
+      "evidence": [
+        {
+          "doc_id": "iris",
+          "quote": "IR-EMPTY 指没有可索引文本，任务标为失败并显示原因。"
+        }
+      ]
+    },
+    {
+      "id": "iris-3",
+      "group": "iris",
+      "split": "dev",
+      "category": "paraphrase",
+      "query": "一大段没有句号的文字怎么保证不会成为巨大文本块？",
+      "answer": "使用字符级保底切分。",
+      "evidence": [
+        {
+          "doc_id": "iris",
+          "quote": "没有标点的超长文本使用字符级保底切分。"
+        }
+      ]
+    },
+    {
+      "id": "iris-4",
+      "group": "iris",
+      "split": "dev",
+      "category": "cross_language",
+      "query": "How much sentence overlap does Iris retain?",
+      "answer": "一百字符左右。",
+      "evidence": [
+        {
+          "doc_id": "iris",
+          "quote": "保留一百字符左右的句子重叠。"
+        }
+      ]
+    },
+    {
+      "id": "iris-negative",
+      "group": "iris",
+      "split": "dev",
+      "category": "unanswerable",
+      "query": "Iris 对不同语言分别使用哪种 tokenizer？",
+      "answer": "",
+      "evidence": []
+    },
+    {
+      "id": "jade-1",
+      "group": "jade",
+      "split": "test",
+      "category": "direct",
+      "query": "Jade 的检索延迟告警条件是什么？",
+      "answer": "p95 连续五分钟超过两秒。",
+      "evidence": [
+        {
+          "doc_id": "jade",
+          "quote": "检索延迟 p95 连续五分钟超过两秒时触发告警。"
+        }
+      ]
+    },
+    {
+      "id": "jade-2",
+      "group": "jade",
+      "split": "test",
+      "category": "identifier",
+      "query": "JD-NO-SOURCES 一定意味着服务故障吗？",
+      "answer": "不，表示检索完成但没有返回资料。",
+      "evidence": [
+        {
+          "doc_id": "jade",
+          "quote": "JD-NO-SOURCES 表示检索完成但没有返回资料，这个事件单独计数，不等同于服务故障。"
+        }
+      ]
+    },
+    {
+      "id": "jade-3",
+      "group": "jade",
+      "split": "test",
+      "category": "paraphrase",
+      "query": "用户等很久才看到第一个字，应先拆哪些阶段？",
+      "answer": "理解、检索、重排、模型首字等待。",
+      "evidence": [
+        {
+          "doc_id": "jade",
+          "quote": "先拆分理解、检索、重排与模型首字等待时间。"
+        }
+      ]
+    },
+    {
+      "id": "jade-4",
+      "group": "jade",
+      "split": "test",
+      "category": "cross_language",
+      "query": "Does Jade include model cold start in sampled retrieval latency?",
+      "answer": "不包含，冷启动单独记录。",
+      "evidence": [
+        {
+          "doc_id": "jade",
+          "quote": "采样不包含模型冷启动，但冷启动时间单独记录。"
+        }
+      ]
+    },
+    {
+      "id": "jade-negative",
+      "group": "jade",
+      "split": "test",
+      "category": "unanswerable",
+      "query": "Jade 告警通知发送到哪个邮箱？",
+      "answer": "",
+      "evidence": []
+    },
+    {
+      "id": "kite-1",
+      "group": "kite",
+      "split": "dev",
+      "category": "direct",
+      "query": "Kite 发布后旧索引保留多久？",
+      "answer": "至少四十八小时。",
+      "evidence": [
+        {
+          "doc_id": "kite",
+          "quote": "旧索引至少保留四十八小时"
+        }
+      ]
+    },
+    {
+      "id": "kite-2",
+      "group": "kite",
+      "split": "dev",
+      "category": "identifier",
+      "query": "KT-DIMENSION 出现时应用如何处理？",
+      "answer": "拒绝启动并要求显式迁移。",
+      "evidence": [
+        {
+          "doc_id": "kite",
+          "quote": "KT-DIMENSION 表示索引维度与查询模型不一致，应用拒绝启动并要求显式迁移。"
+        }
+      ]
+    },
+    {
+      "id": "kite-3",
+      "group": "kite",
+      "split": "dev",
+      "category": "paraphrase",
+      "query": "换了嵌入模型，只重新生成提问向量行吗？",
+      "answer": "不行，也要重建文档向量。",
+      "evidence": [
+        {
+          "doc_id": "kite",
+          "quote": "只变更嵌入模型时也必须重建文档向量，不能只换查询向量"
+        }
+      ]
+    },
+    {
+      "id": "kite-4",
+      "group": "kite",
+      "split": "dev",
+      "category": "cross_language",
+      "query": "What must be restored together when rolling back Kite?",
+      "answer": "模型版本、切块配置和索引读取指针。",
+      "evidence": [
+        {
+          "doc_id": "kite",
+          "quote": "回滚时同时恢复模型版本、切块配置和索引读取指针"
+        }
+      ]
+    },
+    {
+      "id": "kite-negative",
+      "group": "kite",
+      "split": "dev",
+      "category": "unanswerable",
+      "query": "Kite 团队上个月发布了多少次？",
+      "answer": "",
+      "evidence": []
+    },
+    {
+      "id": "lotus-1",
+      "group": "lotus",
+      "split": "test",
+      "category": "direct",
+      "query": "Lotus 摘要长度上限是多少？",
+      "answer": "八百字符。",
+      "evidence": [
+        {
+          "doc_id": "lotus",
+          "quote": "一份最多八百字符的摘要"
+        }
+      ]
+    },
+    {
+      "id": "lotus-2",
+      "group": "lotus",
+      "split": "test",
+      "category": "identifier",
+      "query": "LT-MEMORY-STALE 时会继续使用旧摘要吗？",
+      "answer": "不会，暂不注入旧摘要。",
+      "evidence": [
+        {
+          "doc_id": "lotus",
+          "quote": "LT-MEMORY-STALE 表示用户修改历史后摘要待重算，这时暂不注入旧摘要。"
+        }
+      ]
+    },
+    {
+      "id": "lotus-3",
+      "group": "lotus",
+      "split": "test",
+      "category": "paraphrase",
+      "query": "删掉会话以后，长期摘要也要一起清除吗？",
+      "answer": "要，在同一事务内删除。",
+      "evidence": [
+        {
+          "doc_id": "lotus",
+          "quote": "删除会话时，消息与长期记忆在同一事务内删除。"
+        }
+      ]
+    },
+    {
+      "id": "lotus-4",
+      "group": "lotus",
+      "split": "test",
+      "category": "cross_language",
+      "query": "Does Lotus keep six messages or six question-answer turns?",
+      "answer": "六条消息，通常三轮问答。",
+      "evidence": [
+        {
+          "doc_id": "lotus",
+          "quote": "六条消息不等于六轮问答，成对消息通常只覆盖三轮。"
+        }
+      ]
+    },
+    {
+      "id": "lotus-negative",
+      "group": "lotus",
+      "split": "test",
+      "category": "unanswerable",
+      "query": "Lotus 的摘要模型每百万 token 多少钱？",
+      "answer": "",
+      "evidence": []
+    }
+  ]
+}

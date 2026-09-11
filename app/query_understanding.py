@@ -40,13 +40,13 @@ def detect_explicit_intent(question: str) -> QueryUnderstanding:
     ))
     if current and kb_signal:
         return _result(text, "mixed", "同时包含内部资料与时效信息信号")
+    if kb_signal and any(word in lowered for word in ("根据", "结合", "参考", "按照", "基于", "依据")):
+        return _result(text, "knowledge", "明确要求引用资料完成任务")
     if any(word in lowered for word in ("润色", "改写", "写一", "创作", "起草", "翻译")):
         return _result(text, "create", "包含创作或改写指令")
     if current:
         return _result(text, "current", "包含明确时效信号")
-    if lowered in {"你好", "您好", "嗨", "hello", "hi"} or any(
-        lowered.startswith(prefix) for prefix in ("你好，", "你好,", "谢谢", "再见")
-    ):
+    if lowered.rstrip("，,。.!！ ") in {"你好", "您好", "嗨", "hello", "hi", "谢谢", "谢谢你", "再见"}:
         return _result(text, "chitchat", "包含明确会话信号")
     return _result(text, "knowledge", "默认按知识解释处理")
 
@@ -70,7 +70,8 @@ def understand_query(
     classifier: Callable[[str], Any] | None = None,
 ) -> QueryUnderstanding:
     deterministic = detect_explicit_intent(question)
-    if deterministic.semantic_intent != "knowledge" or classifier is None:
+    if (deterministic.semantic_intent != "knowledge" or classifier is None
+            or deterministic.reason == "明确要求引用资料完成任务"):
         return deterministic
     try:
         payload = classifier(question)

@@ -1,0 +1,7201 @@
+{
+  "created_at_utc": "2026-09-10T14:21:37.322880+00:00",
+  "scope": "synthetic exact-cosine retrieval only; no HNSW, LLM, routing or query rewriting",
+  "dataset": {
+    "version": "synthetic-v1",
+    "sha256": "58581d71b1a0e3c21390d45c3e0c6e5a351d8bc7c6c12bf21ccef704b60ee115",
+    "documents": 12,
+    "chunks": 24,
+    "queries": 60,
+    "provenance": "原创虚构操作手册，仅供离线检索实验；产品名、参数与规则不描述本项目的实际功能。AI 编写，证据经脚本核验，尚未获业务人员独立标注复核。"
+  },
+  "parameters": {
+    "k": 4,
+    "candidate_k": 8,
+    "sim_threshold": 0.4,
+    "rerank_threshold": 0.3,
+    "threads": 4,
+    "split": "all"
+  },
+  "environment": {
+    "python": "3.13.13",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpu": "Intel64 Family 6 Model 186 Stepping 2, GenuineIntel",
+    "logical_cpus": 12,
+    "device": "cpu",
+    "packages": {
+      "torch": "2.14.0",
+      "sentence-transformers": "6.0.1",
+      "transformers": "5.16.1",
+      "numpy": "2.5.2",
+      "pydantic": "2.13.5"
+    }
+  },
+  "source": {
+    "git_head": "7609d11085e5c423a174215adc4f0bc05cc0a94c",
+    "files_sha256": {
+      "app/chat_service.py": "e0367bc247a1968af0bb778ec0c454750b4a6fd0a62a5428c8016abb8f13b9ed",
+      "app/chunker.py": "91289a86b181312569d075769e9fa7dd90582797f153d365e3ecbbf6b9a48abc",
+      "app/config.py": "b56971749aad3739c9c053fbb10f55e9354f1f50aeb6a2cab47022f2e4d160fd",
+      "app/embeddings.py": "29b1f82112f153a24e07cda12d76956fe99c6de8290f937c32439dc0a3d2181a",
+      "app/parser.py": "96a561da0668852f511fad58b19a070f569c6a142bc97fcf3c12ec7b1bb17889",
+      "evaluation/__init__.py": "b40580946b7ff0c5983d599869aa6728bea45f9fa95b884df5e70c5394784f59",
+      "evaluation/dataset.py": "27ca3b6e414f2f5e4f7129b6cfa907c4b89dbc159f2c1be2efec7d72dd4d5eb7",
+      "evaluation/metrics.py": "377bd0097868c27f611cc22a4eef960ffd9956be98e516e7e08a926aace1bc26",
+      "evaluation/report.py": "051fad15a0bc5a48bc73bd1a9e3a32c9486c1560ecad41b543eaea5c38636bfb",
+      "evaluation/run.py": "d361206eb27ab135e99aa23b4774372eeae4739bb1c32d026ce48cdf453c1f13"
+    }
+  },
+  "models": [
+    {
+      "model": "BAAI/bge-m3",
+      "snapshot": "5617a9f61b028005a4858fdac845db406aefb181",
+      "files_sha256": {
+        "config.json": "26159e7ad065073448460117eb24b7a4572f6f4e78eadff65dc0a11c052449fa",
+        "modules.json": "84e40c8e006c9b1d6c122e02cba9b02458120b5fb0c87b746c41e0207cf642cf",
+        "tokenizer.json": "21106b6d7dab2952c1d496fb21d5dc9db75c28ed361a05f5020bbba27810dd08",
+        "tokenizer_config.json": "a62b2b6784f990259fddef5f16388693a8043be4f69179e6a5257eeb3f9abac4",
+        "sentence_bert_config.json": "eb9b44b13c0f52a3b3685c3b1cbdea1ba8b04bea123b98f61610048940776eb1",
+        "1_Pooling/config.json": "e54c164a07274f2eb45bb724f54a79d1efcc90c41573887cd9a29aeee0597352",
+        "pytorch_model.bin": "b5e0ce3470abf5ef3831aa1bd5553b486803e83251590ab7ff35a117cf6aad38"
+      }
+    },
+    {
+      "model": "BAAI/bge-reranker-base",
+      "snapshot": "2cfc18c9415c912f9d8155881c133215df768a70",
+      "files_sha256": {
+        "config.json": "289adf7ada1eb6b4afa7589a48a032d45a076cf2e46dcdb3b4cabc33be14f708",
+        "tokenizer.json": "9eb652ac4e40cc093272bbbe0f55d521cf67570060227109b5cdc20945a4489e",
+        "tokenizer_config.json": "a1d6bc8734a6f635dc158508bef000f8e2e5a759c7d92f984b2c86e5ff53425b",
+        "model.safetensors": "ced967c45fd1902eb92716c9ceeca7c95a936770ea9db611f5a841b926e33fbd"
+      }
+    }
+  ],
+  "setup_ms": {
+    "model_fingerprints": 3213.214000003063,
+    "model_load": 5104.686599996057,
+    "corpus_encode": 6288.031399999454,
+    "warmup": 450.4492999985814
+  },
+  "timing_scope": "single sequential pass per mode after warmup; query embedding + exact cosine + production selection/rerank; excludes startup/corpus encoding/LLM/DB/network; not a throughput benchmark",
+  "chunks": [
+    {
+      "chunk_id": 1,
+      "doc_id": "atlas",
+      "title": "Atlas 文件入库手册.md",
+      "content": "# Atlas 文件入库手册：基本约定\nAtlas 接收 PDF、DOCX、TXT 和 Markdown 文件，单个文件上限为 20 MiB。文件超过上限时返回 AT-413，不创建入库任务。扫描 PDF 先执行 OCR，再按页保留识别文本；CSV 和 XLSX 不在本版支持范围内。",
+      "section": "Atlas 文件入库手册：基本约定",
+      "start_char": 0,
+      "end_char": 142
+    },
+    {
+      "chunk_id": 2,
+      "doc_id": "atlas",
+      "title": "Atlas 文件入库手册.md",
+      "content": "# Atlas 文件入库手册：异常处理\nAtlas 的解析失败任务保留原文件七天，供管理员重新提交。若连续两次 OCR 都未提取到文本，任务标为 failed_empty，界面提示上传清晰原件。文件成功处理后才对检索可见，处理中状态不表示内容已经可搜索。",
+      "section": "Atlas 文件入库手册：异常处理",
+      "start_char": 144,
+      "end_char": 271
+    },
+    {
+      "chunk_id": 3,
+      "doc_id": "boreal",
+      "title": "Boreal 接口凭据规范.md",
+      "content": "# Boreal 接口凭据规范：基本约定\nBoreal 的服务凭据每九十天轮换一次，采用新旧双密钥过渡。新密钥验证通过后，旧密钥最多保留二十四小时。凭据只从运行环境读取，不能写入源码、镜像层、请求日志或追踪记录。",
+      "section": "Boreal 接口凭据规范：基本约定",
+      "start_char": 0,
+      "end_char": 106
+    },
+    {
+      "chunk_id": 4,
+      "doc_id": "boreal",
+      "title": "Boreal 接口凭据规范.md",
+      "content": "# Boreal 接口凭据规范：异常处理\nBoreal 的 BK-401 表示密钥失效，客户端应停止自动重试并通知管理员。审计记录仅保留密钥指纹的末六位、调用时间和服务名称，不保留密钥正文。凭据意外泄露时立即吊销，而不是等到下一次定期轮换。",
+      "section": "Boreal 接口凭据规范：异常处理",
+      "start_char": 108,
+      "end_char": 228
+    },
+    {
+      "chunk_id": 5,
+      "doc_id": "cedar",
+      "title": "Cedar 外部请求策略.md",
+      "content": "# Cedar 外部请求策略：基本约定\nCedar 对上游返回的 429、502 和 503 执行最多三次总尝试，采用带随机抖动的指数退避。整个调用链的总时间预算为四十五秒；剩余预算不足时直接结束，不再等待下一轮退避。普通参数错误不重试。",
+      "section": "Cedar 外部请求策略：基本约定",
+      "start_char": 0,
+      "end_char": 119
+    },
+    {
+      "chunk_id": 6,
+      "doc_id": "cedar",
+      "title": "Cedar 外部请求策略.md",
+      "content": "# Cedar 外部请求策略：异常处理\nCedar 把 CD-DEADLINE 作为总预算耗尽的错误码。连续五次请求失败会打开熔断器，三十秒后只放行一个探测请求。探测成功才恢复普通流量；失败则继续熔断，避免大量请求同时冲击异常上游。",
+      "section": "Cedar 外部请求策略：异常处理",
+      "start_char": 121,
+      "end_char": 237
+    },
+    {
+      "chunk_id": 7,
+      "doc_id": "delta",
+      "title": "Delta 数据备份操作规程.md",
+      "content": "# Delta 数据备份操作规程：基本约定\nDelta 每六小时生成一次加密全量备份，备份保留十四天，密钥和备份文件分开存储。每周从随机选取的备份恢复到隔离实例，并核对文档数量与内容校验和。仅有备份成功日志不能替代恢复演练。",
+      "section": "Delta 数据备份操作规程：基本约定",
+      "start_char": 0,
+      "end_char": 112
+    },
+    {
+      "chunk_id": 8,
+      "doc_id": "delta",
+      "title": "Delta 数据备份操作规程.md",
+      "content": "# Delta 数据备份操作规程：异常处理\nDelta 的 DL-RESTORE-MISMATCH 表示恢复后校验和不一致，值班人员须隔离该备份并回退到上一个通过验证的备份。恢复实例未完成校验前禁止接入业务流量。演练报告必须记录备份时间、恢复耗时和校验结果。",
+      "section": "Delta 数据备份操作规程：异常处理",
+      "start_char": 114,
+      "end_char": 243
+    },
+    {
+      "chunk_id": 9,
+      "doc_id": "ember",
+      "title": "Ember 回答缓存约定.md",
+      "content": "# Ember 回答缓存约定：基本约定\nEmber 的缓存键由租户标识、知识库标识、知识库版本、规范化问题和模型版本组成。缓存有效期为十五分钟。任何文档新增、删除或替换都增加知识库版本，旧版本缓存不再命中，防止回答引用已删除资料。",
+      "section": "Ember 回答缓存约定：基本约定",
+      "start_char": 0,
+      "end_char": 115
+    },
+    {
+      "chunk_id": 10,
+      "doc_id": "ember",
+      "title": "Ember 回答缓存约定.md",
+      "content": "# Ember 回答缓存约定：异常处理\nEmber 对无资料命中的回答不写入共享缓存。EM-CACHE-BYPASS 表示本次跳过缓存，通常出现在用户开启临时会话时。缓存命中仍需检查调用者当前权限，权限变化不能依靠十五分钟过期时间自然生效。",
+      "section": "Ember 回答缓存约定：异常处理",
+      "start_char": 117,
+      "end_char": 237
+    },
+    {
+      "chunk_id": 11,
+      "doc_id": "fjord",
+      "title": "Fjord 知识库权限设计.md",
+      "content": "# Fjord 知识库权限设计：基本约定\nFjord 将知识库角色划分为 reader、editor 和 owner。reader 只能提问和读取获授权原文，editor 可额外上传与删除资料，owner 可管理成员。每次检索都由服务端添加租户过滤，前端传来的租户标识不能作为授权依据。",
+      "section": "Fjord 知识库权限设计：基本约定",
+      "start_char": 0,
+      "end_char": 143
+    },
+    {
+      "chunk_id": 12,
+      "doc_id": "fjord",
+      "title": "Fjord 知识库权限设计.md",
+      "content": "# Fjord 知识库权限设计：异常处理\nFjord 返回 FJ-403 时，表示用户没有目标知识库的访问权限。原件下载、引用上下文和向量可视化接口使用与问答相同的权限检查。移除成员后立即失去访问权限，不等待其浏览器会话结束。",
+      "section": "Fjord 知识库权限设计：异常处理",
+      "start_char": 145,
+      "end_char": 258
+    },
+    {
+      "chunk_id": 13,
+      "doc_id": "garnet",
+      "title": "Garnet 检索配置参考.md",
+      "content": "# Garnet 检索配置参考：基本约定\nGarnet 的候选召回数固定为四十，交叉编码器对候选逐对打分，再保留前五段进入生成上下文。候选数与最终上下文段数分别配置，不能混用。仅看相似度分数无法证明答案正确，必须用带证据标注的问题集验证。",
+      "section": "Garnet 检索配置参考：基本约定",
+      "start_char": 0,
+      "end_char": 119
+    },
+    {
+      "chunk_id": 14,
+      "doc_id": "garnet",
+      "title": "Garnet 检索配置参考.md",
+      "content": "# Garnet 检索配置参考：异常处理\nGarnet 在 GR-RERANK-OFF 出现时退化为向量排序，并在追踪里标注降级。质量评测禁止把这种降级计入重排实验。评测结果需分别报告检索召回、排序质量和答案忠实度，不用一个含糊的准确率概括所有环节。",
+      "section": "Garnet 检索配置参考：异常处理",
+      "start_char": 121,
+      "end_char": 246
+    },
+    {
+      "chunk_id": 15,
+      "doc_id": "harbor",
+      "title": "Harbor 入库任务执行协议.md",
+      "content": "# Harbor 入库任务执行协议：基本约定\nHarbor 工作进程领取任务时持有六十秒租约，每二十秒续约。进程退出后，租约到期的任务才允许其他工作进程领取。单个任务最多重试三次，超出次数后进入人工处理队列，不能永久停留在处理中状态。",
+      "section": "Harbor 入库任务执行协议：基本约定",
+      "start_char": 0,
+      "end_char": 117
+    },
+    {
+      "chunk_id": 16,
+      "doc_id": "harbor",
+      "title": "Harbor 入库任务执行协议.md",
+      "content": "# Harbor 入库任务执行协议：异常处理\nHarbor 用知识库标识、文件内容哈希和索引版本生成幂等键。HB-DUPLICATE 表示相同版本资料已完成入库，返回已有文档标识而不是重复生成向量。任务最终提交时再次检查租约所有者，防止过期工作进程写入结果。",
+      "section": "Harbor 入库任务执行协议：异常处理",
+      "start_char": 119,
+      "end_char": 248
+    },
+    {
+      "chunk_id": 17,
+      "doc_id": "iris",
+      "title": "Iris 文档切块规则.md",
+      "content": "# Iris 文档切块规则：基本约定\nIris 以五百字符为目标块长度，保留一百字符左右的句子重叠。标题归属后续正文，页码与章节路径写入块元数据。英文句号和中文句末标点均作为分句依据，没有标点的超长文本使用字符级保底切分。",
+      "section": "Iris 文档切块规则：基本约定",
+      "start_char": 0,
+      "end_char": 111
+    },
+    {
+      "chunk_id": 18,
+      "doc_id": "iris",
+      "title": "Iris 文档切块规则.md",
+      "content": "# Iris 文档切块规则：异常处理\nIris 的 IR-EMPTY 指没有可索引文本，任务标为失败并显示原因。切块算法版本发生变化时必须重建索引，旧版本查询结果不能与新版本混作同一次实验。比较不同切块方式时，需要保持问题集、模型和召回参数一致。",
+      "section": "Iris 文档切块规则：异常处理",
+      "start_char": 113,
+      "end_char": 236
+    },
+    {
+      "chunk_id": 19,
+      "doc_id": "jade",
+      "title": "Jade 服务告警说明.md",
+      "content": "# Jade 服务告警说明：基本约定\nJade 在检索延迟 p95 连续五分钟超过两秒时触发告警。采样不包含模型冷启动，但冷启动时间单独记录。每条追踪必须有请求标识、知识库标识、阶段名称和耗时，用户的完整问题与文档正文不写入普通日志。",
+      "section": "Jade 服务告警说明：基本约定",
+      "start_char": 0,
+      "end_char": 117
+    },
+    {
+      "chunk_id": 20,
+      "doc_id": "jade",
+      "title": "Jade 服务告警说明.md",
+      "content": "# Jade 服务告警说明：异常处理\nJade 的 JD-NO-SOURCES 表示检索完成但没有返回资料，这个事件单独计数，不等同于服务故障。值班人员结合问题类别和空检索比例判断阈值是否过严。排查首字慢时，先拆分理解、检索、重排与模型首字等待时间。",
+      "section": "Jade 服务告警说明：异常处理",
+      "start_char": 119,
+      "end_char": 244
+    },
+    {
+      "chunk_id": 21,
+      "doc_id": "kite",
+      "title": "Kite 索引发布流程.md",
+      "content": "# Kite 索引发布流程：基本约定\nKite 使用蓝绿两套索引发布新版本，新索引通过固定保留集后才切换读取指针。旧索引至少保留四十八小时，便于回滚。只变更嵌入模型时也必须重建文档向量，不能只换查询向量，因为不同模型的空间并不兼容。",
+      "section": "Kite 索引发布流程：基本约定",
+      "start_char": 0,
+      "end_char": 116
+    },
+    {
+      "chunk_id": 22,
+      "doc_id": "kite",
+      "title": "Kite 索引发布流程.md",
+      "content": "# Kite 索引发布流程：异常处理\nKite 的 KT-DIMENSION 表示索引维度与查询模型不一致，应用拒绝启动并要求显式迁移。普通启动流程不删除旧文档。回滚时同时恢复模型版本、切块配置和索引读取指针，不能只恢复应用代码。",
+      "section": "Kite 索引发布流程：异常处理",
+      "start_char": 118,
+      "end_char": 233
+    },
+    {
+      "chunk_id": 23,
+      "doc_id": "lotus",
+      "title": "Lotus 会话记忆约定.md",
+      "content": "# Lotus 会话记忆约定：基本约定\nLotus 每次生成注入最近六条消息和一份最多八百字符的摘要。六条消息不等于六轮问答，成对消息通常只覆盖三轮。长期记忆用于保持对话连贯，不作为证明业务事实的外部证据；资料结论仍需有效引用。",
+      "section": "Lotus 会话记忆约定：基本约定",
+      "start_char": 0,
+      "end_char": 114
+    },
+    {
+      "chunk_id": 24,
+      "doc_id": "lotus",
+      "title": "Lotus 会话记忆约定.md",
+      "content": "# Lotus 会话记忆约定：异常处理\nLotus 的 LT-MEMORY-STALE 表示用户修改历史后摘要待重算，这时暂不注入旧摘要。删除会话时，消息与长期记忆在同一事务内删除。关闭记忆开关后既不读取长期摘要，也不调用后台摘要更新接口。",
+      "section": "Lotus 会话记忆约定：异常处理",
+      "start_char": 116,
+      "end_char": 236
+    }
+  ],
+  "runs": {
+    "dense": {
+      "overall": {
+        "count": 60,
+        "answerable_count": 48,
+        "unanswerable_count": 12,
+        "recall": 1.0,
+        "mrr": 0.9739583333333334,
+        "ndcg": 0.9804501314926011,
+        "answerable_empty_rate": 0.0,
+        "unanswerable_empty_rate": 0.0,
+        "latency_p50_ms": 87.94990000023972,
+        "latency_p95_ms": 106.90099999919767
+      },
+      "by_split": {
+        "dev": {
+          "count": 30,
+          "answerable_count": 24,
+          "unanswerable_count": 6,
+          "recall": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "answerable_empty_rate": 0.0,
+          "unanswerable_empty_rate": 0.0,
+          "latency_p50_ms": 88.86044999962905,
+          "latency_p95_ms": 110.220800001116
+        },
+        "test": {
+          "count": 30,
+          "answerable_count": 24,
+          "unanswerable_count": 6,
+          "recall": 1.0,
+          "mrr": 0.9479166666666666,
+          "ndcg": 0.9609002629852021,
+          "answerable_empty_rate": 0.0,
+          "unanswerable_empty_rate": 0.0,
+          "latency_p50_ms": 87.9120499957935,
+          "latency_p95_ms": 103.2481000002008
+        }
+      },
+      "by_category": {
+        "cross_language": {
+          "count": 12,
+          "answerable_count": 12,
+          "unanswerable_count": 0,
+          "recall": 1.0,
+          "mrr": 0.9583333333333334,
+          "ndcg": 0.9692441461309548,
+          "answerable_empty_rate": 0.0,
+          "unanswerable_empty_rate": null,
+          "latency_p50_ms": 88.87264999793842,
+          "latency_p95_ms": 102.2614000030444
+        },
+        "direct": {
+          "count": 12,
+          "answerable_count": 12,
+          "unanswerable_count": 0,
+          "recall": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "answerable_empty_rate": 0.0,
+          "unanswerable_empty_rate": null,
+          "latency_p50_ms": 85.58690000063507,
+          "latency_p95_ms": 106.90099999919767
+        },
+        "identifier": {
+          "count": 12,
+          "answerable_count": 12,
+          "unanswerable_count": 0,
+          "recall": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "answerable_empty_rate": 0.0,
+          "unanswerable_empty_rate": null,
+          "latency_p50_ms": 92.27720000126283,
+          "latency_p95_ms": 110.220800001116
+        },
+        "paraphrase": {
+          "count": 12,
+          "answerable_count": 12,
+          "unanswerable_count": 0,
+          "recall": 1.0,
+          "mrr": 0.9375,
+          "ndcg": 0.9525563798394494,
+          "answerable_empty_rate": 0.0,
+          "unanswerable_empty_rate": null,
+          "latency_p50_ms": 93.07134999835398,
+          "latency_p95_ms": 117.93730000499636
+        },
+        "unanswerable": {
+          "count": 12,
+          "answerable_count": 0,
+          "unanswerable_count": 12,
+          "recall": null,
+          "mrr": null,
+          "ndcg": null,
+          "answerable_empty_rate": null,
+          "unanswerable_empty_rate": 0.0,
+          "latency_p50_ms": 86.88405000066268,
+          "latency_p95_ms": 108.42530000081751
+        }
+      },
+      "results": [
+        {
+          "id": "atlas-1",
+          "group": "atlas",
+          "split": "dev",
+          "category": "direct",
+          "query": "Atlas 一次能上传多大的文件？",
+          "answer": "20 MiB。",
+          "evidence": [
+            {
+              "doc_id": "atlas",
+              "quote": "单个文件上限为 20 MiB。"
+            }
+          ],
+          "gold_ids": [
+            1
+          ],
+          "candidate_ids": [
+            1,
+            2,
+            17,
+            7,
+            23,
+            22,
+            15,
+            21
+          ],
+          "retrieved_ids": [
+            1,
+            2,
+            17,
+            7
+          ],
+          "scores": [
+            0.7644839826239367,
+            0.6072022649940729,
+            0.48421863046336744,
+            0.46989470914545045
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 87.93770000193035,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Atlas 一次能上传多大的文件？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "atlas-2",
+          "group": "atlas",
+          "split": "dev",
+          "category": "identifier",
+          "query": "AT-413 表示什么？",
+          "answer": "上传文件超出大小上限，不创建入库任务。",
+          "evidence": [
+            {
+              "doc_id": "atlas",
+              "quote": "文件超过上限时返回 AT-413，不创建入库任务。"
+            }
+          ],
+          "gold_ids": [
+            1
+          ],
+          "candidate_ids": [
+            1,
+            24,
+            22,
+            8,
+            23,
+            2,
+            12,
+            5
+          ],
+          "retrieved_ids": [
+            1
+          ],
+          "scores": [
+            0.40969183503241624
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 110.220800001116,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "AT-413 表示什么？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "atlas-3",
+          "group": "atlas",
+          "split": "dev",
+          "category": "paraphrase",
+          "query": "文档处理没成功，原件过几天会清理？",
+          "answer": "七天。",
+          "evidence": [
+            {
+              "doc_id": "atlas",
+              "quote": "解析失败任务保留原文件七天"
+            }
+          ],
+          "gold_ids": [
+            2
+          ],
+          "candidate_ids": [
+            2,
+            7,
+            4,
+            3,
+            15,
+            8,
+            20,
+            9
+          ],
+          "retrieved_ids": [
+            2,
+            7,
+            4,
+            3
+          ],
+          "scores": [
+            0.6920072632285185,
+            0.5894992502121499,
+            0.5641288247385591,
+            0.5559953123176302
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 117.93730000499636,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "文档处理没成功，原件过几天会清理？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "atlas-4",
+          "group": "atlas",
+          "split": "dev",
+          "category": "cross_language",
+          "query": "What happens when Atlas OCR extracts no text twice?",
+          "answer": "标为 failed_empty，提示上传清晰原件。",
+          "evidence": [
+            {
+              "doc_id": "atlas",
+              "quote": "若连续两次 OCR 都未提取到文本，任务标为 failed_empty"
+            }
+          ],
+          "gold_ids": [
+            2
+          ],
+          "candidate_ids": [
+            2,
+            1,
+            18,
+            24,
+            23,
+            6,
+            8,
+            10
+          ],
+          "retrieved_ids": [
+            2,
+            1,
+            18,
+            24
+          ],
+          "scores": [
+            0.6688773063647561,
+            0.5718868959998967,
+            0.49619724124091075,
+            0.4868925746675335
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 89.78319999732776,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "What happens when Atlas OCR extracts no text twice?",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "atlas-negative",
+          "group": "atlas",
+          "split": "dev",
+          "category": "unanswerable",
+          "query": "Atlas 的 OCR 使用哪款 GPU？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            1,
+            2,
+            24,
+            23,
+            18,
+            22,
+            17,
+            20
+          ],
+          "retrieved_ids": [
+            1,
+            2
+          ],
+          "scores": [
+            0.5380479663259675,
+            0.477117869245036
+          ],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 102.3776000001817,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Atlas 的 OCR 使用哪款 GPU？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "boreal-1",
+          "group": "boreal",
+          "split": "test",
+          "category": "direct",
+          "query": "Boreal 的服务凭据多久轮换？",
+          "answer": "每九十天。",
+          "evidence": [
+            {
+              "doc_id": "boreal",
+              "quote": "服务凭据每九十天轮换一次"
+            }
+          ],
+          "gold_ids": [
+            3
+          ],
+          "candidate_ids": [
+            3,
+            4,
+            15,
+            23,
+            21,
+            9,
+            5,
+            7
+          ],
+          "retrieved_ids": [
+            3,
+            4,
+            15,
+            23
+          ],
+          "scores": [
+            0.7958077335785543,
+            0.6734376674898744,
+            0.4872514611662397,
+            0.45916910628972524
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 85.11480000015581,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Boreal 的服务凭据多久轮换？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "boreal-2",
+          "group": "boreal",
+          "split": "test",
+          "category": "identifier",
+          "query": "遇到 BK-401 该继续重试吗？",
+          "answer": "停止自动重试并通知管理员。",
+          "evidence": [
+            {
+              "doc_id": "boreal",
+              "quote": "BK-401 表示密钥失效，客户端应停止自动重试并通知管理员。"
+            }
+          ],
+          "gold_ids": [
+            4
+          ],
+          "candidate_ids": [
+            4,
+            14,
+            6,
+            8,
+            22,
+            12,
+            5,
+            18
+          ],
+          "retrieved_ids": [
+            4,
+            14,
+            6,
+            8
+          ],
+          "scores": [
+            0.6308248979469553,
+            0.4772628744031461,
+            0.4677564414565559,
+            0.4588787336669758
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 98.02669999771751,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "遇到 BK-401 该继续重试吗？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "boreal-3",
+          "group": "boreal",
+          "split": "test",
+          "category": "paraphrase",
+          "query": "排查接口访问时，能把完整密钥留在审计记录里吗？",
+          "answer": "不能，只保留指纹末六位、调用时间和服务名称。",
+          "evidence": [
+            {
+              "doc_id": "boreal",
+              "quote": "审计记录仅保留密钥指纹的末六位、调用时间和服务名称，不保留密钥正文。"
+            }
+          ],
+          "gold_ids": [
+            4
+          ],
+          "candidate_ids": [
+            4,
+            3,
+            7,
+            6,
+            9,
+            2,
+            8,
+            16
+          ],
+          "retrieved_ids": [
+            4,
+            3,
+            7,
+            6
+          ],
+          "scores": [
+            0.6494333019086679,
+            0.5685462235528481,
+            0.5438761224231178,
+            0.5414916286143094
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 96.49870000430383,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "排查接口访问时，能把完整密钥留在审计记录里吗？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "boreal-4",
+          "group": "boreal",
+          "split": "test",
+          "category": "cross_language",
+          "query": "How long may the old Boreal key remain after the new key is verified?",
+          "answer": "最多二十四小时。",
+          "evidence": [
+            {
+              "doc_id": "boreal",
+              "quote": "新密钥验证通过后，旧密钥最多保留二十四小时。"
+            }
+          ],
+          "gold_ids": [
+            3
+          ],
+          "candidate_ids": [
+            3,
+            4,
+            9,
+            21,
+            15,
+            23,
+            7,
+            5
+          ],
+          "retrieved_ids": [
+            3,
+            4,
+            9,
+            21
+          ],
+          "scores": [
+            0.7283886142543013,
+            0.6427295721242957,
+            0.527186154870253,
+            0.4860427800206082
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 102.2614000030444,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "How long may the old Boreal key remain after the new key is verified?",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "boreal-negative",
+          "group": "boreal",
+          "split": "test",
+          "category": "unanswerable",
+          "query": "Boreal 管理员的联系电话是什么？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            4,
+            3,
+            23,
+            6,
+            5,
+            8,
+            7,
+            15
+          ],
+          "retrieved_ids": [
+            4,
+            3
+          ],
+          "scores": [
+            0.5633191147078535,
+            0.5464268392673598
+          ],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 80.29520000127377,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Boreal 管理员的联系电话是什么？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "cedar-1",
+          "group": "cedar",
+          "split": "dev",
+          "category": "direct",
+          "query": "Cedar 的上游请求总预算是多少？",
+          "answer": "四十五秒。",
+          "evidence": [
+            {
+              "doc_id": "cedar",
+              "quote": "整个调用链的总时间预算为四十五秒"
+            }
+          ],
+          "gold_ids": [
+            5
+          ],
+          "candidate_ids": [
+            5,
+            6,
+            20,
+            15,
+            13,
+            22,
+            19,
+            3
+          ],
+          "retrieved_ids": [
+            5,
+            6,
+            20,
+            15
+          ],
+          "scores": [
+            0.6480258507501225,
+            0.5985498107291108,
+            0.43163794697457114,
+            0.4287319601967614
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 87.80409999599215,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Cedar 的上游请求总预算是多少？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "cedar-2",
+          "group": "cedar",
+          "split": "dev",
+          "category": "identifier",
+          "query": "CD-DEADLINE 是什么意思？",
+          "answer": "总预算耗尽。",
+          "evidence": [
+            {
+              "doc_id": "cedar",
+              "quote": "CD-DEADLINE 作为总预算耗尽的错误码"
+            }
+          ],
+          "gold_ids": [
+            6
+          ],
+          "candidate_ids": [
+            6,
+            20,
+            8,
+            19,
+            18,
+            22,
+            24,
+            14
+          ],
+          "retrieved_ids": [
+            6,
+            20
+          ],
+          "scores": [
+            0.53554081362535,
+            0.4051323992961001
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 93.30310000223108,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "CD-DEADLINE 是什么意思？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "cedar-3",
+          "group": "cedar",
+          "split": "dev",
+          "category": "paraphrase",
+          "query": "外部接口连续出错后，多久会试探恢复？",
+          "answer": "三十秒后放行一个探测请求。",
+          "evidence": [
+            {
+              "doc_id": "cedar",
+              "quote": "连续五次请求失败会打开熔断器，三十秒后只放行一个探测请求。"
+            }
+          ],
+          "gold_ids": [
+            6
+          ],
+          "candidate_ids": [
+            6,
+            5,
+            3,
+            4,
+            19,
+            8,
+            2,
+            15
+          ],
+          "retrieved_ids": [
+            6,
+            5,
+            3,
+            4
+          ],
+          "scores": [
+            0.6707000749719337,
+            0.6470863353581614,
+            0.5813371432249932,
+            0.5812865779398415
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 77.47560000279918,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "外部接口连续出错后，多久会试探恢复？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "cedar-4",
+          "group": "cedar",
+          "split": "dev",
+          "category": "cross_language",
+          "query": "How many total attempts does Cedar allow for HTTP 503?",
+          "answer": "最多三次总尝试。",
+          "evidence": [
+            {
+              "doc_id": "cedar",
+              "quote": "Cedar 对上游返回的 429、502 和 503 执行最多三次总尝试"
+            }
+          ],
+          "gold_ids": [
+            5
+          ],
+          "candidate_ids": [
+            5,
+            6,
+            12,
+            15,
+            4,
+            1,
+            20,
+            13
+          ],
+          "retrieved_ids": [
+            5,
+            6,
+            12,
+            15
+          ],
+          "scores": [
+            0.6637250306184146,
+            0.598303015333225,
+            0.4570907213672971,
+            0.4554987470212962
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 93.65689999685856,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "How many total attempts does Cedar allow for HTTP 503?",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "cedar-negative",
+          "group": "cedar",
+          "split": "dev",
+          "category": "unanswerable",
+          "query": "Cedar 每月 API 采购预算是多少？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            5,
+            6,
+            3,
+            20,
+            4,
+            15,
+            21,
+            9
+          ],
+          "retrieved_ids": [
+            5,
+            6
+          ],
+          "scores": [
+            0.5498725639060191,
+            0.49669264538342295
+          ],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 92.32229999906849,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Cedar 每月 API 采购预算是多少？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "delta-1",
+          "group": "delta",
+          "split": "test",
+          "category": "direct",
+          "query": "Delta 的备份保留多长时间？",
+          "answer": "十四天。",
+          "evidence": [
+            {
+              "doc_id": "delta",
+              "quote": "备份保留十四天"
+            }
+          ],
+          "gold_ids": [
+            7
+          ],
+          "candidate_ids": [
+            7,
+            8,
+            3,
+            2,
+            9,
+            23,
+            19,
+            21
+          ],
+          "retrieved_ids": [
+            7,
+            8,
+            3,
+            2
+          ],
+          "scores": [
+            0.7661371905182858,
+            0.6587513904165972,
+            0.5449357226211926,
+            0.5206080716269451
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 76.39999999810243,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Delta 的备份保留多长时间？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "delta-2",
+          "group": "delta",
+          "split": "test",
+          "category": "identifier",
+          "query": "DL-RESTORE-MISMATCH 应如何处理？",
+          "answer": "隔离该备份，回退到上一个通过验证的备份。",
+          "evidence": [
+            {
+              "doc_id": "delta",
+              "quote": "值班人员须隔离该备份并回退到上一个通过验证的备份。"
+            }
+          ],
+          "gold_ids": [
+            8
+          ],
+          "candidate_ids": [
+            8,
+            24,
+            20,
+            16,
+            7,
+            2,
+            22,
+            4
+          ],
+          "retrieved_ids": [
+            8,
+            24,
+            20,
+            16
+          ],
+          "scores": [
+            0.7324489132748385,
+            0.521334234980213,
+            0.5123590769970948,
+            0.5115498047621398
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 80.96549999754643,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "DL-RESTORE-MISMATCH 应如何处理？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "delta-3",
+          "group": "delta",
+          "split": "test",
+          "category": "paraphrase",
+          "query": "备份显示成功了，还要定期试着恢复吗？",
+          "answer": "需要，每周恢复到隔离实例并核验。",
+          "evidence": [
+            {
+              "doc_id": "delta",
+              "quote": "每周从随机选取的备份恢复到隔离实例，并核对文档数量与内容校验和。"
+            }
+          ],
+          "gold_ids": [
+            7
+          ],
+          "candidate_ids": [
+            7,
+            8,
+            4,
+            2,
+            16,
+            9,
+            23,
+            10
+          ],
+          "retrieved_ids": [
+            7,
+            8,
+            4,
+            2
+          ],
+          "scores": [
+            0.6509614629122455,
+            0.6161210935732104,
+            0.5718253693244995,
+            0.5594972230302624
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 82.70990000164602,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "备份显示成功了，还要定期试着恢复吗？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "delta-4",
+          "group": "delta",
+          "split": "test",
+          "category": "cross_language",
+          "query": "How often does Delta create an encrypted full backup?",
+          "answer": "每六小时一次。",
+          "evidence": [
+            {
+              "doc_id": "delta",
+              "quote": "Delta 每六小时生成一次加密全量备份"
+            }
+          ],
+          "gold_ids": [
+            7
+          ],
+          "candidate_ids": [
+            7,
+            8,
+            23,
+            3,
+            6,
+            5,
+            19,
+            4
+          ],
+          "retrieved_ids": [
+            7,
+            8,
+            23,
+            3
+          ],
+          "scores": [
+            0.7224550980054005,
+            0.5620614733395359,
+            0.47547403583804493,
+            0.4715838537662188
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 87.96209999854909,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "How often does Delta create an encrypted full backup?",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "delta-negative",
+          "group": "delta",
+          "split": "test",
+          "category": "unanswerable",
+          "query": "Delta 的备份机房在哪个城市？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            8,
+            7,
+            24,
+            19,
+            22,
+            16,
+            1,
+            20
+          ],
+          "retrieved_ids": [
+            8,
+            7
+          ],
+          "scores": [
+            0.6015958414958257,
+            0.6008147629460094
+          ],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 78.6796000029426,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Delta 的备份机房在哪个城市？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "ember-1",
+          "group": "ember",
+          "split": "dev",
+          "category": "direct",
+          "query": "Ember 回答缓存的有效期多长？",
+          "answer": "十五分钟。",
+          "evidence": [
+            {
+              "doc_id": "ember",
+              "quote": "缓存有效期为十五分钟。"
+            }
+          ],
+          "gold_ids": [
+            9
+          ],
+          "candidate_ids": [
+            9,
+            10,
+            15,
+            3,
+            23,
+            19,
+            7,
+            5
+          ],
+          "retrieved_ids": [
+            9,
+            10,
+            15,
+            3
+          ],
+          "scores": [
+            0.8052534730190407,
+            0.7113907119418555,
+            0.5540646700716184,
+            0.537317730774271
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 83.81289999670116,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Ember 回答缓存的有效期多长？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "ember-2",
+          "group": "ember",
+          "split": "dev",
+          "category": "identifier",
+          "query": "EM-CACHE-BYPASS 表示什么？",
+          "answer": "本次跳过缓存，通常是临时会话。",
+          "evidence": [
+            {
+              "doc_id": "ember",
+              "quote": "EM-CACHE-BYPASS 表示本次跳过缓存，通常出现在用户开启临时会话时。"
+            }
+          ],
+          "gold_ids": [
+            10
+          ],
+          "candidate_ids": [
+            10,
+            9,
+            24,
+            4,
+            20,
+            23,
+            8,
+            18
+          ],
+          "retrieved_ids": [
+            10,
+            9,
+            24,
+            4
+          ],
+          "scores": [
+            0.6831735496479376,
+            0.4901102870327258,
+            0.4444168026985599,
+            0.4093349927833215
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 84.80490000511054,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "EM-CACHE-BYPASS 表示什么？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "ember-3",
+          "group": "ember",
+          "split": "dev",
+          "category": "paraphrase",
+          "query": "资料删掉后怎样避免继续给出旧缓存答案？",
+          "answer": "变更知识库版本，使旧缓存不再命中。",
+          "evidence": [
+            {
+              "doc_id": "ember",
+              "quote": "任何文档新增、删除或替换都增加知识库版本，旧版本缓存不再命中"
+            }
+          ],
+          "gold_ids": [
+            9
+          ],
+          "candidate_ids": [
+            9,
+            10,
+            24,
+            4,
+            18,
+            21,
+            7,
+            16
+          ],
+          "retrieved_ids": [
+            9,
+            10,
+            24,
+            4
+          ],
+          "scores": [
+            0.6373502932157674,
+            0.6202379833846413,
+            0.5817151079220614,
+            0.5432831746641846
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 76.85999999375781,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "资料删掉后怎样避免继续给出旧缓存答案？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "ember-4",
+          "group": "ember",
+          "split": "dev",
+          "category": "cross_language",
+          "query": "Does an Ember cache hit still require a permission check?",
+          "answer": "仍需检查当前权限。",
+          "evidence": [
+            {
+              "doc_id": "ember",
+              "quote": "缓存命中仍需检查调用者当前权限"
+            }
+          ],
+          "gold_ids": [
+            10
+          ],
+          "candidate_ids": [
+            10,
+            9,
+            16,
+            4,
+            12,
+            15,
+            5,
+            6
+          ],
+          "retrieved_ids": [
+            10,
+            9,
+            16,
+            4
+          ],
+          "scores": [
+            0.620448365280679,
+            0.553921059149062,
+            0.4689544217685458,
+            0.4669632745246006
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 86.72609999484848,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Does an Ember cache hit still require a permission check?",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "ember-negative",
+          "group": "ember",
+          "split": "dev",
+          "category": "unanswerable",
+          "query": "Ember 缓存服务器有多少 GB 内存？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            9,
+            10,
+            15,
+            5,
+            1,
+            20,
+            3,
+            23
+          ],
+          "retrieved_ids": [
+            9,
+            10,
+            15,
+            5
+          ],
+          "scores": [
+            0.6999262459521731,
+            0.6418944491086348,
+            0.47293310330608224,
+            0.4533523262834218
+          ],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 83.84810000279685,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Ember 缓存服务器有多少 GB 内存？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "fjord-1",
+          "group": "fjord",
+          "split": "test",
+          "category": "direct",
+          "query": "Fjord 的 reader 可以做什么？",
+          "answer": "只能提问和读取获授权原文。",
+          "evidence": [
+            {
+              "doc_id": "fjord",
+              "quote": "reader 只能提问和读取获授权原文"
+            }
+          ],
+          "gold_ids": [
+            11
+          ],
+          "candidate_ids": [
+            11,
+            12,
+            1,
+            20,
+            16,
+            9,
+            15,
+            6
+          ],
+          "retrieved_ids": [
+            11,
+            12,
+            1,
+            20
+          ],
+          "scores": [
+            0.6902912267605156,
+            0.6074399071125995,
+            0.4480502651671256,
+            0.4292869697163465
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 86.05900000111433,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Fjord 的 reader 可以做什么？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "fjord-2",
+          "group": "fjord",
+          "split": "test",
+          "category": "identifier",
+          "query": "FJ-403 是什么错误？",
+          "answer": "没有目标知识库的访问权限。",
+          "evidence": [
+            {
+              "doc_id": "fjord",
+              "quote": "FJ-403 时，表示用户没有目标知识库的访问权限。"
+            }
+          ],
+          "gold_ids": [
+            12
+          ],
+          "candidate_ids": [
+            12,
+            4,
+            20,
+            8,
+            19,
+            6,
+            5,
+            11
+          ],
+          "retrieved_ids": [
+            12,
+            4,
+            20,
+            8
+          ],
+          "scores": [
+            0.5735480848764505,
+            0.44699091031173416,
+            0.40763284281006684,
+            0.4045087031772002
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 89.07959999487503,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "FJ-403 是什么错误？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "fjord-3",
+          "group": "fjord",
+          "split": "test",
+          "category": "paraphrase",
+          "query": "用户还能看对话，引用原文件的接口就不用再验权了吗？",
+          "answer": "仍需相同权限检查。",
+          "evidence": [
+            {
+              "doc_id": "fjord",
+              "quote": "原件下载、引用上下文和向量可视化接口使用与问答相同的权限检查。"
+            }
+          ],
+          "gold_ids": [
+            12
+          ],
+          "candidate_ids": [
+            12,
+            10,
+            4,
+            11,
+            9,
+            3,
+            16,
+            8
+          ],
+          "retrieved_ids": [
+            12,
+            10,
+            4,
+            11
+          ],
+          "scores": [
+            0.5583046810038014,
+            0.5255575355368411,
+            0.523829465959056,
+            0.5130414693401741
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 103.2481000002008,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "用户还能看对话，引用原文件的接口就不用再验权了吗？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "fjord-4",
+          "group": "fjord",
+          "split": "test",
+          "category": "cross_language",
+          "query": "Who may manage knowledge base members in Fjord?",
+          "answer": "owner。",
+          "evidence": [
+            {
+              "doc_id": "fjord",
+              "quote": "owner 可管理成员。"
+            }
+          ],
+          "gold_ids": [
+            11
+          ],
+          "candidate_ids": [
+            11,
+            12,
+            9,
+            16,
+            15,
+            21,
+            10,
+            20
+          ],
+          "retrieved_ids": [
+            11,
+            12,
+            9
+          ],
+          "scores": [
+            0.6481261931459121,
+            0.5743284021679738,
+            0.4039862578630072
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 82.5805999993463,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Who may manage knowledge base members in Fjord?",
+              "count": 3
+            }
+          ]
+        },
+        {
+          "id": "fjord-negative",
+          "group": "fjord",
+          "split": "test",
+          "category": "unanswerable",
+          "query": "Fjord 的登录密码最少需要几位？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            11,
+            12,
+            23,
+            9,
+            5,
+            3,
+            6,
+            7
+          ],
+          "retrieved_ids": [
+            11,
+            12,
+            23,
+            9
+          ],
+          "scores": [
+            0.6438009371977617,
+            0.5836920066631833,
+            0.46995021092734357,
+            0.4689696189000511
+          ],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 92.18259999761358,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Fjord 的登录密码最少需要几位？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "garnet-1",
+          "group": "garnet",
+          "split": "dev",
+          "category": "direct",
+          "query": "Garnet 向量召回多少候选？",
+          "answer": "四十。",
+          "evidence": [
+            {
+              "doc_id": "garnet",
+              "quote": "Garnet 的候选召回数固定为四十"
+            }
+          ],
+          "gold_ids": [
+            13
+          ],
+          "candidate_ids": [
+            13,
+            14,
+            5,
+            19,
+            6,
+            21,
+            20,
+            22
+          ],
+          "retrieved_ids": [
+            13,
+            14
+          ],
+          "scores": [
+            0.6051434939270885,
+            0.5087323740360462
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 102.47920000256272,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Garnet 向量召回多少候选？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "garnet-2",
+          "group": "garnet",
+          "split": "dev",
+          "category": "identifier",
+          "query": "GR-RERANK-OFF 出现后采用什么排序？",
+          "answer": "退化为向量排序并标注降级。",
+          "evidence": [
+            {
+              "doc_id": "garnet",
+              "quote": "GR-RERANK-OFF 出现时退化为向量排序，并在追踪里标注降级。"
+            }
+          ],
+          "gold_ids": [
+            14
+          ],
+          "candidate_ids": [
+            14,
+            13,
+            18,
+            8,
+            22,
+            5,
+            6,
+            20
+          ],
+          "retrieved_ids": [
+            14,
+            13,
+            18,
+            8
+          ],
+          "scores": [
+            0.6451959117866866,
+            0.46824051506721415,
+            0.41096931374635476,
+            0.4043990547021708
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 98.67970000050263,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "GR-RERANK-OFF 出现后采用什么排序？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "garnet-3",
+          "group": "garnet",
+          "split": "dev",
+          "category": "paraphrase",
+          "query": "重排没成功的请求还能算进重排效果实验吗？",
+          "answer": "不能。",
+          "evidence": [
+            {
+              "doc_id": "garnet",
+              "quote": "质量评测禁止把这种降级计入重排实验。"
+            }
+          ],
+          "gold_ids": [
+            14
+          ],
+          "candidate_ids": [
+            14,
+            8,
+            6,
+            5,
+            2,
+            18,
+            20,
+            10
+          ],
+          "retrieved_ids": [
+            14,
+            8,
+            6,
+            5
+          ],
+          "scores": [
+            0.5953559203339593,
+            0.54746589398937,
+            0.5449927141380119,
+            0.54365747840508
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 92.46859999984736,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "重排没成功的请求还能算进重排效果实验吗？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "garnet-4",
+          "group": "garnet",
+          "split": "dev",
+          "category": "cross_language",
+          "query": "How many passages does Garnet keep for the generation context?",
+          "answer": "前五段。",
+          "evidence": [
+            {
+              "doc_id": "garnet",
+              "quote": "再保留前五段进入生成上下文。"
+            }
+          ],
+          "gold_ids": [
+            13
+          ],
+          "candidate_ids": [
+            13,
+            14,
+            23,
+            9,
+            21,
+            19,
+            1,
+            11
+          ],
+          "retrieved_ids": [
+            13,
+            14
+          ],
+          "scores": [
+            0.5005581095176869,
+            0.4203696988482447
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 99.92269999929704,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "How many passages does Garnet keep for the generation context?",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "garnet-negative",
+          "group": "garnet",
+          "split": "dev",
+          "category": "unanswerable",
+          "query": "Garnet 使用哪个具体型号的交叉编码器？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            13,
+            14,
+            4,
+            16,
+            19,
+            1,
+            6,
+            20
+          ],
+          "retrieved_ids": [
+            13,
+            14
+          ],
+          "scores": [
+            0.5709446191925986,
+            0.4890585774458888
+          ],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 85.79979999922216,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Garnet 使用哪个具体型号的交叉编码器？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "harbor-1",
+          "group": "harbor",
+          "split": "test",
+          "category": "direct",
+          "query": "Harbor 任务的租约多长？",
+          "answer": "六十秒。",
+          "evidence": [
+            {
+              "doc_id": "harbor",
+              "quote": "持有六十秒租约"
+            }
+          ],
+          "gold_ids": [
+            15
+          ],
+          "candidate_ids": [
+            15,
+            16,
+            9,
+            3,
+            5,
+            7,
+            23,
+            19
+          ],
+          "retrieved_ids": [
+            15,
+            16,
+            9,
+            3
+          ],
+          "scores": [
+            0.7125053196005621,
+            0.5127257403196075,
+            0.4727116689943172,
+            0.4584984042562413
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 106.90099999919767,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Harbor 任务的租约多长？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "harbor-2",
+          "group": "harbor",
+          "split": "test",
+          "category": "identifier",
+          "query": "HB-DUPLICATE 应返回什么？",
+          "answer": "已有文档标识。",
+          "evidence": [
+            {
+              "doc_id": "harbor",
+              "quote": "HB-DUPLICATE 表示相同版本资料已完成入库，返回已有文档标识而不是重复生成向量。"
+            }
+          ],
+          "gold_ids": [
+            16
+          ],
+          "candidate_ids": [
+            16,
+            8,
+            22,
+            4,
+            15,
+            14,
+            21,
+            13
+          ],
+          "retrieved_ids": [
+            16,
+            8,
+            22,
+            4
+          ],
+          "scores": [
+            0.5993581408086058,
+            0.4690346863384215,
+            0.4596059984541904,
+            0.4586560126149682
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 98.75670000474202,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "HB-DUPLICATE 应返回什么？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "harbor-3",
+          "group": "harbor",
+          "split": "test",
+          "category": "paraphrase",
+          "query": "工作进程失联后，别的进程何时能接手？",
+          "answer": "租约到期后。",
+          "evidence": [
+            {
+              "doc_id": "harbor",
+              "quote": "进程退出后，租约到期的任务才允许其他工作进程领取。"
+            }
+          ],
+          "gold_ids": [
+            15
+          ],
+          "candidate_ids": [
+            15,
+            2,
+            6,
+            3,
+            4,
+            7,
+            10,
+            22
+          ],
+          "retrieved_ids": [
+            15,
+            2,
+            6,
+            3
+          ],
+          "scores": [
+            0.5924821625070379,
+            0.5383894563638995,
+            0.5216908533960648,
+            0.5132768814968257
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 87.8619999930379,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "工作进程失联后，别的进程何时能接手？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "harbor-4",
+          "group": "harbor",
+          "split": "test",
+          "category": "cross_language",
+          "query": "Which fields form the Harbor ingestion idempotency key?",
+          "answer": "知识库标识、文件内容哈希、索引版本。",
+          "evidence": [
+            {
+              "doc_id": "harbor",
+              "quote": "Harbor 用知识库标识、文件内容哈希和索引版本生成幂等键。"
+            }
+          ],
+          "gold_ids": [
+            16
+          ],
+          "candidate_ids": [
+            15,
+            16,
+            9,
+            1,
+            11,
+            10,
+            3,
+            12
+          ],
+          "retrieved_ids": [
+            15,
+            16
+          ],
+          "scores": [
+            0.4264300236833643,
+            0.41621583072054036
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 0.5,
+            "ndcg": 0.6309297535714575
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 0.5,
+            "ndcg": 0.6309297535714575
+          },
+          "latency_ms": 98.73399999924004,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Which fields form the Harbor ingestion idempotency key?",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "harbor-negative",
+          "group": "harbor",
+          "split": "test",
+          "category": "unanswerable",
+          "query": "Harbor 工作进程使用什么操作系统？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            15,
+            16,
+            22,
+            3,
+            10,
+            7,
+            9,
+            4
+          ],
+          "retrieved_ids": [
+            15,
+            16,
+            22,
+            3
+          ],
+          "scores": [
+            0.6003255598531303,
+            0.5761389277192331,
+            0.40614815560054024,
+            0.4047905884079429
+          ],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 86.83329999621492,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Harbor 工作进程使用什么操作系统？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "iris-1",
+          "group": "iris",
+          "split": "dev",
+          "category": "direct",
+          "query": "Iris 的目标块长度是多少？",
+          "answer": "五百字符。",
+          "evidence": [
+            {
+              "doc_id": "iris",
+              "quote": "Iris 以五百字符为目标块长度"
+            }
+          ],
+          "gold_ids": [
+            17
+          ],
+          "candidate_ids": [
+            17,
+            18,
+            23,
+            1,
+            5,
+            6,
+            24,
+            9
+          ],
+          "retrieved_ids": [
+            17,
+            18,
+            23,
+            1
+          ],
+          "scores": [
+            0.6652352471937181,
+            0.5350461256262526,
+            0.4198092406663615,
+            0.407177027765877
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 80.33379999687895,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Iris 的目标块长度是多少？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "iris-2",
+          "group": "iris",
+          "split": "dev",
+          "category": "identifier",
+          "query": "IR-EMPTY 代表什么状态？",
+          "answer": "没有可索引文本，任务失败并显示原因。",
+          "evidence": [
+            {
+              "doc_id": "iris",
+              "quote": "IR-EMPTY 指没有可索引文本，任务标为失败并显示原因。"
+            }
+          ],
+          "gold_ids": [
+            18
+          ],
+          "candidate_ids": [
+            18,
+            2,
+            4,
+            20,
+            10,
+            24,
+            9,
+            6
+          ],
+          "retrieved_ids": [
+            18,
+            2,
+            4,
+            20
+          ],
+          "scores": [
+            0.6457225231159411,
+            0.4717077306086559,
+            0.44846111524671445,
+            0.44642582423734023
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 87.83260000200244,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "IR-EMPTY 代表什么状态？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "iris-3",
+          "group": "iris",
+          "split": "dev",
+          "category": "paraphrase",
+          "query": "一大段没有句号的文字怎么保证不会成为巨大文本块？",
+          "answer": "使用字符级保底切分。",
+          "evidence": [
+            {
+              "doc_id": "iris",
+              "quote": "没有标点的超长文本使用字符级保底切分。"
+            }
+          ],
+          "gold_ids": [
+            17
+          ],
+          "candidate_ids": [
+            17,
+            23,
+            18,
+            1,
+            13,
+            24,
+            9,
+            7
+          ],
+          "retrieved_ids": [
+            17,
+            23,
+            18,
+            1
+          ],
+          "scores": [
+            0.5838360031837442,
+            0.49617724188381923,
+            0.46732775134755694,
+            0.45947472686248175
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 83.99790000112262,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "一大段没有句号的文字怎么保证不会成为巨大文本块？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "iris-4",
+          "group": "iris",
+          "split": "dev",
+          "category": "cross_language",
+          "query": "How much sentence overlap does Iris retain?",
+          "answer": "一百字符左右。",
+          "evidence": [
+            {
+              "doc_id": "iris",
+              "quote": "保留一百字符左右的句子重叠。"
+            }
+          ],
+          "gold_ids": [
+            17
+          ],
+          "candidate_ids": [
+            17,
+            18,
+            23,
+            10,
+            24,
+            13,
+            9,
+            1
+          ],
+          "retrieved_ids": [
+            17,
+            18,
+            23
+          ],
+          "scores": [
+            0.6050019387085488,
+            0.5183742187361192,
+            0.4274339239496685
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 85.23630000127014,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "How much sentence overlap does Iris retain?",
+              "count": 3
+            }
+          ]
+        },
+        {
+          "id": "iris-negative",
+          "group": "iris",
+          "split": "dev",
+          "category": "unanswerable",
+          "query": "Iris 对不同语言分别使用哪种 tokenizer？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            17,
+            18,
+            13,
+            1,
+            23,
+            21,
+            3,
+            16
+          ],
+          "retrieved_ids": [
+            17,
+            18,
+            13
+          ],
+          "scores": [
+            0.554750719860652,
+            0.5445952832030317,
+            0.40708965079739284
+          ],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 108.42530000081751,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Iris 对不同语言分别使用哪种 tokenizer？",
+              "count": 3
+            }
+          ]
+        },
+        {
+          "id": "jade-1",
+          "group": "jade",
+          "split": "test",
+          "category": "direct",
+          "query": "Jade 的检索延迟告警条件是什么？",
+          "answer": "p95 连续五分钟超过两秒。",
+          "evidence": [
+            {
+              "doc_id": "jade",
+              "quote": "检索延迟 p95 连续五分钟超过两秒时触发告警。"
+            }
+          ],
+          "gold_ids": [
+            19
+          ],
+          "candidate_ids": [
+            19,
+            20,
+            6,
+            14,
+            5,
+            13,
+            22,
+            4
+          ],
+          "retrieved_ids": [
+            19,
+            20,
+            6,
+            14
+          ],
+          "scores": [
+            0.7709829679524549,
+            0.6664831109682408,
+            0.5265708574599054,
+            0.5010977999366237
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 80.30250000592787,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Jade 的检索延迟告警条件是什么？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "jade-2",
+          "group": "jade",
+          "split": "test",
+          "category": "identifier",
+          "query": "JD-NO-SOURCES 一定意味着服务故障吗？",
+          "answer": "不，表示检索完成但没有返回资料。",
+          "evidence": [
+            {
+              "doc_id": "jade",
+              "quote": "JD-NO-SOURCES 表示检索完成但没有返回资料，这个事件单独计数，不等同于服务故障。"
+            }
+          ],
+          "gold_ids": [
+            20
+          ],
+          "candidate_ids": [
+            20,
+            12,
+            19,
+            6,
+            22,
+            4,
+            8,
+            10
+          ],
+          "retrieved_ids": [
+            20,
+            12,
+            19,
+            6
+          ],
+          "scores": [
+            0.77645417942152,
+            0.5852316778044716,
+            0.5806460207795607,
+            0.540992199691651
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 91.25130000029458,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "JD-NO-SOURCES 一定意味着服务故障吗？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "jade-3",
+          "group": "jade",
+          "split": "test",
+          "category": "paraphrase",
+          "query": "用户等很久才看到第一个字，应先拆哪些阶段？",
+          "answer": "理解、检索、重排、模型首字等待。",
+          "evidence": [
+            {
+              "doc_id": "jade",
+              "quote": "先拆分理解、检索、重排与模型首字等待时间。"
+            }
+          ],
+          "gold_ids": [
+            20
+          ],
+          "candidate_ids": [
+            9,
+            17,
+            21,
+            20,
+            2,
+            13,
+            23,
+            22
+          ],
+          "retrieved_ids": [
+            9,
+            17,
+            21,
+            20
+          ],
+          "scores": [
+            0.5160051658227132,
+            0.48659107417502395,
+            0.48389187152043533,
+            0.4802214183073341
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 0.25,
+            "ndcg": 0.43067655807339306
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 0.25,
+            "ndcg": 0.43067655807339306
+          },
+          "latency_ms": 93.6740999968606,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "用户等很久才看到第一个字，应先拆哪些阶段？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "jade-4",
+          "group": "jade",
+          "split": "test",
+          "category": "cross_language",
+          "query": "Does Jade include model cold start in sampled retrieval latency?",
+          "answer": "不包含，冷启动单独记录。",
+          "evidence": [
+            {
+              "doc_id": "jade",
+              "quote": "采样不包含模型冷启动，但冷启动时间单独记录。"
+            }
+          ],
+          "gold_ids": [
+            19
+          ],
+          "candidate_ids": [
+            19,
+            20,
+            8,
+            14,
+            5,
+            6,
+            7,
+            22
+          ],
+          "retrieved_ids": [
+            19,
+            20,
+            8,
+            14
+          ],
+          "scores": [
+            0.6153533230746396,
+            0.5423776154491169,
+            0.43125139199302087,
+            0.43060454539964926
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 87.57680000417167,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Does Jade include model cold start in sampled retrieval latency?",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "jade-negative",
+          "group": "jade",
+          "split": "test",
+          "category": "unanswerable",
+          "query": "Jade 告警通知发送到哪个邮箱？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            19,
+            20,
+            6,
+            4,
+            12,
+            7,
+            16,
+            8
+          ],
+          "retrieved_ids": [
+            19,
+            20,
+            6,
+            4
+          ],
+          "scores": [
+            0.6235569441563374,
+            0.5348889108352293,
+            0.4199315262288889,
+            0.41866390028355116
+          ],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 86.93480000511045,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Jade 告警通知发送到哪个邮箱？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "kite-1",
+          "group": "kite",
+          "split": "dev",
+          "category": "direct",
+          "query": "Kite 发布后旧索引保留多久？",
+          "answer": "至少四十八小时。",
+          "evidence": [
+            {
+              "doc_id": "kite",
+              "quote": "旧索引至少保留四十八小时"
+            }
+          ],
+          "gold_ids": [
+            21
+          ],
+          "candidate_ids": [
+            21,
+            22,
+            3,
+            9,
+            2,
+            4,
+            24,
+            19
+          ],
+          "retrieved_ids": [
+            21,
+            22,
+            3,
+            9
+          ],
+          "scores": [
+            0.7774799982698197,
+            0.6516910047635361,
+            0.5243249429728568,
+            0.5169473068735826
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 94.6131000018795,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Kite 发布后旧索引保留多久？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "kite-2",
+          "group": "kite",
+          "split": "dev",
+          "category": "identifier",
+          "query": "KT-DIMENSION 出现时应用如何处理？",
+          "answer": "拒绝启动并要求显式迁移。",
+          "evidence": [
+            {
+              "doc_id": "kite",
+              "quote": "KT-DIMENSION 表示索引维度与查询模型不一致，应用拒绝启动并要求显式迁移。"
+            }
+          ],
+          "gold_ids": [
+            22
+          ],
+          "candidate_ids": [
+            22,
+            8,
+            14,
+            6,
+            16,
+            18,
+            20,
+            24
+          ],
+          "retrieved_ids": [
+            22,
+            8,
+            14,
+            6
+          ],
+          "scores": [
+            0.7097402478405241,
+            0.5067051628234217,
+            0.5013452220080316,
+            0.500437127483377
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 82.51770000060787,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "KT-DIMENSION 出现时应用如何处理？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "kite-3",
+          "group": "kite",
+          "split": "dev",
+          "category": "paraphrase",
+          "query": "换了嵌入模型，只重新生成提问向量行吗？",
+          "answer": "不行，也要重建文档向量。",
+          "evidence": [
+            {
+              "doc_id": "kite",
+              "quote": "只变更嵌入模型时也必须重建文档向量，不能只换查询向量"
+            }
+          ],
+          "gold_ids": [
+            21
+          ],
+          "candidate_ids": [
+            21,
+            14,
+            22,
+            16,
+            12,
+            18,
+            9,
+            13
+          ],
+          "retrieved_ids": [
+            21,
+            14,
+            22,
+            16
+          ],
+          "scores": [
+            0.5843004620385988,
+            0.5182242692356605,
+            0.5153704738074409,
+            0.498963174390355
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 100.20549999899231,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "换了嵌入模型，只重新生成提问向量行吗？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "kite-4",
+          "group": "kite",
+          "split": "dev",
+          "category": "cross_language",
+          "query": "What must be restored together when rolling back Kite?",
+          "answer": "模型版本、切块配置和索引读取指针。",
+          "evidence": [
+            {
+              "doc_id": "kite",
+              "quote": "回滚时同时恢复模型版本、切块配置和索引读取指针"
+            }
+          ],
+          "gold_ids": [
+            22
+          ],
+          "candidate_ids": [
+            22,
+            21,
+            8,
+            14,
+            24,
+            5,
+            7,
+            4
+          ],
+          "retrieved_ids": [
+            22,
+            21,
+            8
+          ],
+          "scores": [
+            0.5330946562376199,
+            0.5219942490510261,
+            0.4305451099340001
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 85.3170999980648,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "What must be restored together when rolling back Kite?",
+              "count": 3
+            }
+          ]
+        },
+        {
+          "id": "kite-negative",
+          "group": "kite",
+          "split": "dev",
+          "category": "unanswerable",
+          "query": "Kite 团队上个月发布了多少次？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            21,
+            22,
+            5,
+            19,
+            15,
+            16,
+            6,
+            7
+          ],
+          "retrieved_ids": [
+            21,
+            22,
+            5
+          ],
+          "scores": [
+            0.5913361652358424,
+            0.5528269667211184,
+            0.40746287169880757
+          ],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 101.12839999783318,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Kite 团队上个月发布了多少次？",
+              "count": 3
+            }
+          ]
+        },
+        {
+          "id": "lotus-1",
+          "group": "lotus",
+          "split": "test",
+          "category": "direct",
+          "query": "Lotus 摘要长度上限是多少？",
+          "answer": "八百字符。",
+          "evidence": [
+            {
+              "doc_id": "lotus",
+              "quote": "一份最多八百字符的摘要"
+            }
+          ],
+          "gold_ids": [
+            23
+          ],
+          "candidate_ids": [
+            23,
+            24,
+            17,
+            1,
+            21,
+            19,
+            2,
+            3
+          ],
+          "retrieved_ids": [
+            23,
+            24,
+            17,
+            1
+          ],
+          "scores": [
+            0.6840841636058387,
+            0.5923276849912366,
+            0.5442787588843355,
+            0.544002687953201
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 79.56800000101794,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Lotus 摘要长度上限是多少？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "lotus-2",
+          "group": "lotus",
+          "split": "test",
+          "category": "identifier",
+          "query": "LT-MEMORY-STALE 时会继续使用旧摘要吗？",
+          "answer": "不会，暂不注入旧摘要。",
+          "evidence": [
+            {
+              "doc_id": "lotus",
+              "quote": "LT-MEMORY-STALE 表示用户修改历史后摘要待重算，这时暂不注入旧摘要。"
+            }
+          ],
+          "gold_ids": [
+            24
+          ],
+          "candidate_ids": [
+            24,
+            23,
+            21,
+            8,
+            22,
+            2,
+            4,
+            18
+          ],
+          "retrieved_ids": [
+            24,
+            23,
+            21,
+            8
+          ],
+          "scores": [
+            0.7158957706578422,
+            0.5621445993640379,
+            0.5173041511343187,
+            0.48444796042129246
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 99.81459999835351,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "LT-MEMORY-STALE 时会继续使用旧摘要吗？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "lotus-3",
+          "group": "lotus",
+          "split": "test",
+          "category": "paraphrase",
+          "query": "删掉会话以后，长期摘要也要一起清除吗？",
+          "answer": "要，在同一事务内删除。",
+          "evidence": [
+            {
+              "doc_id": "lotus",
+              "quote": "删除会话时，消息与长期记忆在同一事务内删除。"
+            }
+          ],
+          "gold_ids": [
+            24
+          ],
+          "candidate_ids": [
+            24,
+            23,
+            9,
+            4,
+            17,
+            10,
+            2,
+            7
+          ],
+          "retrieved_ids": [
+            24,
+            23,
+            9,
+            4
+          ],
+          "scores": [
+            0.6658989473614663,
+            0.5850766376664669,
+            0.505879686426644,
+            0.5042833209259454
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 96.55340000608703,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "删掉会话以后，长期摘要也要一起清除吗？",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "lotus-4",
+          "group": "lotus",
+          "split": "test",
+          "category": "cross_language",
+          "query": "Does Lotus keep six messages or six question-answer turns?",
+          "answer": "六条消息，通常三轮问答。",
+          "evidence": [
+            {
+              "doc_id": "lotus",
+              "quote": "六条消息不等于六轮问答，成对消息通常只覆盖三轮。"
+            }
+          ],
+          "gold_ids": [
+            23
+          ],
+          "candidate_ids": [
+            23,
+            24,
+            9,
+            10,
+            3,
+            21,
+            13,
+            18
+          ],
+          "retrieved_ids": [
+            23,
+            24,
+            9,
+            10
+          ],
+          "scores": [
+            0.7023315018748403,
+            0.5424400533595392,
+            0.41666790496442063,
+            0.4084822404072001
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 93.32939999876544,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Does Lotus keep six messages or six question-answer turns?",
+              "count": 4
+            }
+          ]
+        },
+        {
+          "id": "lotus-negative",
+          "group": "lotus",
+          "split": "test",
+          "category": "unanswerable",
+          "query": "Lotus 的摘要模型每百万 token 多少钱？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            23,
+            24,
+            21,
+            3,
+            17,
+            1,
+            22,
+            18
+          ],
+          "retrieved_ids": [
+            23,
+            24,
+            21,
+            3
+          ],
+          "scores": [
+            0.6147608680142134,
+            0.5287655088833904,
+            0.4741231153455567,
+            0.452608396590357
+          ],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 82.7084000047762,
+          "trace": [
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Lotus 的摘要模型每百万 token 多少钱？",
+              "count": 4
+            }
+          ]
+        }
+      ]
+    },
+    "dense_rerank": {
+      "overall": {
+        "count": 60,
+        "answerable_count": 48,
+        "unanswerable_count": 12,
+        "recall": 0.8958333333333334,
+        "mrr": 0.8854166666666666,
+        "ndcg": 0.888144369866072,
+        "answerable_empty_rate": 0.10416666666666667,
+        "unanswerable_empty_rate": 0.9166666666666666,
+        "latency_p50_ms": 607.4992000030761,
+        "latency_p95_ms": 1642.6537000006647
+      },
+      "by_split": {
+        "dev": {
+          "count": 30,
+          "answerable_count": 24,
+          "unanswerable_count": 6,
+          "recall": 0.875,
+          "mrr": 0.8541666666666666,
+          "ndcg": 0.8596220730654774,
+          "answerable_empty_rate": 0.125,
+          "unanswerable_empty_rate": 0.8333333333333334,
+          "latency_p50_ms": 542.6393499983533,
+          "latency_p95_ms": 687.5243999966187
+        },
+        "test": {
+          "count": 30,
+          "answerable_count": 24,
+          "unanswerable_count": 6,
+          "recall": 0.9166666666666666,
+          "mrr": 0.9166666666666666,
+          "ndcg": 0.9166666666666666,
+          "answerable_empty_rate": 0.08333333333333333,
+          "unanswerable_empty_rate": 1.0,
+          "latency_p50_ms": 637.6585500001966,
+          "latency_p95_ms": 2392.90500000061
+        }
+      },
+      "by_category": {
+        "cross_language": {
+          "count": 12,
+          "answerable_count": 12,
+          "unanswerable_count": 0,
+          "recall": 0.8333333333333334,
+          "mrr": 0.7916666666666666,
+          "ndcg": 0.8025774794642881,
+          "answerable_empty_rate": 0.16666666666666666,
+          "unanswerable_empty_rate": null,
+          "latency_p50_ms": 624.8892500007059,
+          "latency_p95_ms": 1642.6537000006647
+        },
+        "direct": {
+          "count": 12,
+          "answerable_count": 12,
+          "unanswerable_count": 0,
+          "recall": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "answerable_empty_rate": 0.0,
+          "unanswerable_empty_rate": null,
+          "latency_p50_ms": 594.5191500031797,
+          "latency_p95_ms": 691.612399998121
+        },
+        "identifier": {
+          "count": 12,
+          "answerable_count": 12,
+          "unanswerable_count": 0,
+          "recall": 0.9166666666666666,
+          "mrr": 0.9166666666666666,
+          "ndcg": 0.9166666666666666,
+          "answerable_empty_rate": 0.08333333333333333,
+          "unanswerable_empty_rate": null,
+          "latency_p50_ms": 578.333699999348,
+          "latency_p95_ms": 2749.5105999987572
+        },
+        "paraphrase": {
+          "count": 12,
+          "answerable_count": 12,
+          "unanswerable_count": 0,
+          "recall": 0.8333333333333334,
+          "mrr": 0.8333333333333334,
+          "ndcg": 0.8333333333333334,
+          "answerable_empty_rate": 0.16666666666666666,
+          "unanswerable_empty_rate": null,
+          "latency_p50_ms": 643.640599999344,
+          "latency_p95_ms": 2382.088099999237
+        },
+        "unanswerable": {
+          "count": 12,
+          "answerable_count": 0,
+          "unanswerable_count": 12,
+          "recall": null,
+          "mrr": null,
+          "ndcg": null,
+          "answerable_empty_rate": null,
+          "unanswerable_empty_rate": 0.9166666666666666,
+          "latency_p50_ms": 297.57365000477876,
+          "latency_p95_ms": 2392.90500000061
+        }
+      },
+      "results": [
+        {
+          "id": "atlas-1",
+          "group": "atlas",
+          "split": "dev",
+          "category": "direct",
+          "query": "Atlas 一次能上传多大的文件？",
+          "answer": "20 MiB。",
+          "evidence": [
+            {
+              "doc_id": "atlas",
+              "quote": "单个文件上限为 20 MiB。"
+            }
+          ],
+          "gold_ids": [
+            1
+          ],
+          "candidate_ids": [
+            1,
+            2,
+            17,
+            7,
+            23,
+            22,
+            15,
+            21
+          ],
+          "retrieved_ids": [
+            1
+          ],
+          "scores": [
+            0.8033619523048401
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 558.5872999945423,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Atlas 一次能上传多大的文件？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "atlas-2",
+          "group": "atlas",
+          "split": "dev",
+          "category": "identifier",
+          "query": "AT-413 表示什么？",
+          "answer": "上传文件超出大小上限，不创建入库任务。",
+          "evidence": [
+            {
+              "doc_id": "atlas",
+              "quote": "文件超过上限时返回 AT-413，不创建入库任务。"
+            }
+          ],
+          "gold_ids": [
+            1
+          ],
+          "candidate_ids": [
+            1,
+            24,
+            22,
+            8,
+            23,
+            2,
+            12,
+            5
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": 0.0,
+            "mrr": 0,
+            "ndcg": 0.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 189.37000000005355,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 1,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "AT-413 表示什么？",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "atlas-3",
+          "group": "atlas",
+          "split": "dev",
+          "category": "paraphrase",
+          "query": "文档处理没成功，原件过几天会清理？",
+          "answer": "七天。",
+          "evidence": [
+            {
+              "doc_id": "atlas",
+              "quote": "解析失败任务保留原文件七天"
+            }
+          ],
+          "gold_ids": [
+            2
+          ],
+          "candidate_ids": [
+            2,
+            7,
+            4,
+            3,
+            15,
+            8,
+            20,
+            9
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": 0.0,
+            "mrr": 0,
+            "ndcg": 0.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 598.0978000006871,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "文档处理没成功，原件过几天会清理？",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "atlas-4",
+          "group": "atlas",
+          "split": "dev",
+          "category": "cross_language",
+          "query": "What happens when Atlas OCR extracts no text twice?",
+          "answer": "标为 failed_empty，提示上传清晰原件。",
+          "evidence": [
+            {
+              "doc_id": "atlas",
+              "quote": "若连续两次 OCR 都未提取到文本，任务标为 failed_empty"
+            }
+          ],
+          "gold_ids": [
+            2
+          ],
+          "candidate_ids": [
+            2,
+            1,
+            18,
+            24,
+            23,
+            6,
+            8,
+            10
+          ],
+          "retrieved_ids": [
+            2
+          ],
+          "scores": [
+            0.9925419092178345
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 629.7004000007291,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "What happens when Atlas OCR extracts no text twice?",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "atlas-negative",
+          "group": "atlas",
+          "split": "dev",
+          "category": "unanswerable",
+          "query": "Atlas 的 OCR 使用哪款 GPU？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            1,
+            2,
+            24,
+            23,
+            18,
+            22,
+            17,
+            20
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 221.246399996744,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 2,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Atlas 的 OCR 使用哪款 GPU？",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "boreal-1",
+          "group": "boreal",
+          "split": "test",
+          "category": "direct",
+          "query": "Boreal 的服务凭据多久轮换？",
+          "answer": "每九十天。",
+          "evidence": [
+            {
+              "doc_id": "boreal",
+              "quote": "服务凭据每九十天轮换一次"
+            }
+          ],
+          "gold_ids": [
+            3
+          ],
+          "candidate_ids": [
+            3,
+            4,
+            15,
+            23,
+            21,
+            9,
+            5,
+            7
+          ],
+          "retrieved_ids": [
+            3,
+            4
+          ],
+          "scores": [
+            0.9998492002487183,
+            0.9224487543106079
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 581.1524000018835,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Boreal 的服务凭据多久轮换？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "boreal-2",
+          "group": "boreal",
+          "split": "test",
+          "category": "identifier",
+          "query": "遇到 BK-401 该继续重试吗？",
+          "answer": "停止自动重试并通知管理员。",
+          "evidence": [
+            {
+              "doc_id": "boreal",
+              "quote": "BK-401 表示密钥失效，客户端应停止自动重试并通知管理员。"
+            }
+          ],
+          "gold_ids": [
+            4
+          ],
+          "candidate_ids": [
+            4,
+            14,
+            6,
+            8,
+            22,
+            12,
+            5,
+            18
+          ],
+          "retrieved_ids": [
+            4
+          ],
+          "scores": [
+            0.9890923500061035
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 586.7596999960369,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "遇到 BK-401 该继续重试吗？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "boreal-3",
+          "group": "boreal",
+          "split": "test",
+          "category": "paraphrase",
+          "query": "排查接口访问时，能把完整密钥留在审计记录里吗？",
+          "answer": "不能，只保留指纹末六位、调用时间和服务名称。",
+          "evidence": [
+            {
+              "doc_id": "boreal",
+              "quote": "审计记录仅保留密钥指纹的末六位、调用时间和服务名称，不保留密钥正文。"
+            }
+          ],
+          "gold_ids": [
+            4
+          ],
+          "candidate_ids": [
+            4,
+            3,
+            7,
+            6,
+            9,
+            2,
+            8,
+            16
+          ],
+          "retrieved_ids": [
+            4,
+            3
+          ],
+          "scores": [
+            0.939035952091217,
+            0.7019038796424866
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 634.5383000007132,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "排查接口访问时，能把完整密钥留在审计记录里吗？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "boreal-4",
+          "group": "boreal",
+          "split": "test",
+          "category": "cross_language",
+          "query": "How long may the old Boreal key remain after the new key is verified?",
+          "answer": "最多二十四小时。",
+          "evidence": [
+            {
+              "doc_id": "boreal",
+              "quote": "新密钥验证通过后，旧密钥最多保留二十四小时。"
+            }
+          ],
+          "gold_ids": [
+            3
+          ],
+          "candidate_ids": [
+            3,
+            4,
+            9,
+            21,
+            15,
+            23,
+            7,
+            5
+          ],
+          "retrieved_ids": [
+            3
+          ],
+          "scores": [
+            0.9994413256645203
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 752.7735999974539,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "How long may the old Boreal key remain after the new key is verified?",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "boreal-negative",
+          "group": "boreal",
+          "split": "test",
+          "category": "unanswerable",
+          "query": "Boreal 管理员的联系电话是什么？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            4,
+            3,
+            23,
+            6,
+            5,
+            8,
+            7,
+            15
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 230.30390000349144,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 2,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Boreal 管理员的联系电话是什么？",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "cedar-1",
+          "group": "cedar",
+          "split": "dev",
+          "category": "direct",
+          "query": "Cedar 的上游请求总预算是多少？",
+          "answer": "四十五秒。",
+          "evidence": [
+            {
+              "doc_id": "cedar",
+              "quote": "整个调用链的总时间预算为四十五秒"
+            }
+          ],
+          "gold_ids": [
+            5
+          ],
+          "candidate_ids": [
+            5,
+            6,
+            20,
+            15,
+            13,
+            22,
+            19,
+            3
+          ],
+          "retrieved_ids": [
+            5,
+            6
+          ],
+          "scores": [
+            0.9993274211883545,
+            0.9779791235923767
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 671.7930999948294,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Cedar 的上游请求总预算是多少？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "cedar-2",
+          "group": "cedar",
+          "split": "dev",
+          "category": "identifier",
+          "query": "CD-DEADLINE 是什么意思？",
+          "answer": "总预算耗尽。",
+          "evidence": [
+            {
+              "doc_id": "cedar",
+              "quote": "CD-DEADLINE 作为总预算耗尽的错误码"
+            }
+          ],
+          "gold_ids": [
+            6
+          ],
+          "candidate_ids": [
+            6,
+            20,
+            8,
+            19,
+            18,
+            22,
+            24,
+            14
+          ],
+          "retrieved_ids": [
+            6
+          ],
+          "scores": [
+            0.9156127572059631
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 246.3043999960064,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 2,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "CD-DEADLINE 是什么意思？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "cedar-3",
+          "group": "cedar",
+          "split": "dev",
+          "category": "paraphrase",
+          "query": "外部接口连续出错后，多久会试探恢复？",
+          "answer": "三十秒后放行一个探测请求。",
+          "evidence": [
+            {
+              "doc_id": "cedar",
+              "quote": "连续五次请求失败会打开熔断器，三十秒后只放行一个探测请求。"
+            }
+          ],
+          "gold_ids": [
+            6
+          ],
+          "candidate_ids": [
+            6,
+            5,
+            3,
+            4,
+            19,
+            8,
+            2,
+            15
+          ],
+          "retrieved_ids": [
+            6
+          ],
+          "scores": [
+            0.9394498467445374
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 686.0716999944998,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "外部接口连续出错后，多久会试探恢复？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "cedar-4",
+          "group": "cedar",
+          "split": "dev",
+          "category": "cross_language",
+          "query": "How many total attempts does Cedar allow for HTTP 503?",
+          "answer": "最多三次总尝试。",
+          "evidence": [
+            {
+              "doc_id": "cedar",
+              "quote": "Cedar 对上游返回的 429、502 和 503 执行最多三次总尝试"
+            }
+          ],
+          "gold_ids": [
+            5
+          ],
+          "candidate_ids": [
+            5,
+            6,
+            12,
+            15,
+            4,
+            1,
+            20,
+            13
+          ],
+          "retrieved_ids": [
+            5
+          ],
+          "scores": [
+            0.9991666078567505
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 687.5243999966187,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "How many total attempts does Cedar allow for HTTP 503?",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "cedar-negative",
+          "group": "cedar",
+          "split": "dev",
+          "category": "unanswerable",
+          "query": "Cedar 每月 API 采购预算是多少？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            5,
+            6,
+            3,
+            20,
+            4,
+            15,
+            21,
+            9
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 249.80170000344515,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 2,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Cedar 每月 API 采购预算是多少？",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "delta-1",
+          "group": "delta",
+          "split": "test",
+          "category": "direct",
+          "query": "Delta 的备份保留多长时间？",
+          "answer": "十四天。",
+          "evidence": [
+            {
+              "doc_id": "delta",
+              "quote": "备份保留十四天"
+            }
+          ],
+          "gold_ids": [
+            7
+          ],
+          "candidate_ids": [
+            7,
+            8,
+            3,
+            2,
+            9,
+            23,
+            19,
+            21
+          ],
+          "retrieved_ids": [
+            7,
+            8
+          ],
+          "scores": [
+            0.9996569156646729,
+            0.35344555974006653
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 665.5268000031356,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Delta 的备份保留多长时间？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "delta-2",
+          "group": "delta",
+          "split": "test",
+          "category": "identifier",
+          "query": "DL-RESTORE-MISMATCH 应如何处理？",
+          "answer": "隔离该备份，回退到上一个通过验证的备份。",
+          "evidence": [
+            {
+              "doc_id": "delta",
+              "quote": "值班人员须隔离该备份并回退到上一个通过验证的备份。"
+            }
+          ],
+          "gold_ids": [
+            8
+          ],
+          "candidate_ids": [
+            8,
+            24,
+            20,
+            16,
+            7,
+            2,
+            22,
+            4
+          ],
+          "retrieved_ids": [
+            8
+          ],
+          "scores": [
+            0.9977033734321594
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 731.1212999993586,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "DL-RESTORE-MISMATCH 应如何处理？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "delta-3",
+          "group": "delta",
+          "split": "test",
+          "category": "paraphrase",
+          "query": "备份显示成功了，还要定期试着恢复吗？",
+          "answer": "需要，每周恢复到隔离实例并核验。",
+          "evidence": [
+            {
+              "doc_id": "delta",
+              "quote": "每周从随机选取的备份恢复到隔离实例，并核对文档数量与内容校验和。"
+            }
+          ],
+          "gold_ids": [
+            7
+          ],
+          "candidate_ids": [
+            7,
+            8,
+            4,
+            2,
+            16,
+            9,
+            23,
+            10
+          ],
+          "retrieved_ids": [
+            7
+          ],
+          "scores": [
+            0.4920240044593811
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 756.2222999986261,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "备份显示成功了，还要定期试着恢复吗？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "delta-4",
+          "group": "delta",
+          "split": "test",
+          "category": "cross_language",
+          "query": "How often does Delta create an encrypted full backup?",
+          "answer": "每六小时一次。",
+          "evidence": [
+            {
+              "doc_id": "delta",
+              "quote": "Delta 每六小时生成一次加密全量备份"
+            }
+          ],
+          "gold_ids": [
+            7
+          ],
+          "candidate_ids": [
+            7,
+            8,
+            23,
+            3,
+            6,
+            5,
+            19,
+            4
+          ],
+          "retrieved_ids": [
+            7
+          ],
+          "scores": [
+            0.9991568326950073
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 641.7560999980196,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "How often does Delta create an encrypted full backup?",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "delta-negative",
+          "group": "delta",
+          "split": "test",
+          "category": "unanswerable",
+          "query": "Delta 的备份机房在哪个城市？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            8,
+            7,
+            24,
+            19,
+            22,
+            16,
+            1,
+            20
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 206.6601999977138,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 2,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Delta 的备份机房在哪个城市？",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "ember-1",
+          "group": "ember",
+          "split": "dev",
+          "category": "direct",
+          "query": "Ember 回答缓存的有效期多长？",
+          "answer": "十五分钟。",
+          "evidence": [
+            {
+              "doc_id": "ember",
+              "quote": "缓存有效期为十五分钟。"
+            }
+          ],
+          "gold_ids": [
+            9
+          ],
+          "candidate_ids": [
+            9,
+            10,
+            15,
+            3,
+            23,
+            19,
+            7,
+            5
+          ],
+          "retrieved_ids": [
+            9,
+            10
+          ],
+          "scores": [
+            0.9993619322776794,
+            0.9719317555427551
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 494.4774000032339,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Ember 回答缓存的有效期多长？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "ember-2",
+          "group": "ember",
+          "split": "dev",
+          "category": "identifier",
+          "query": "EM-CACHE-BYPASS 表示什么？",
+          "answer": "本次跳过缓存，通常是临时会话。",
+          "evidence": [
+            {
+              "doc_id": "ember",
+              "quote": "EM-CACHE-BYPASS 表示本次跳过缓存，通常出现在用户开启临时会话时。"
+            }
+          ],
+          "gold_ids": [
+            10
+          ],
+          "candidate_ids": [
+            10,
+            9,
+            24,
+            4,
+            20,
+            23,
+            8,
+            18
+          ],
+          "retrieved_ids": [
+            10
+          ],
+          "scores": [
+            0.9993060827255249
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 526.6914000021643,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 6,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "EM-CACHE-BYPASS 表示什么？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "ember-3",
+          "group": "ember",
+          "split": "dev",
+          "category": "paraphrase",
+          "query": "资料删掉后怎样避免继续给出旧缓存答案？",
+          "answer": "变更知识库版本，使旧缓存不再命中。",
+          "evidence": [
+            {
+              "doc_id": "ember",
+              "quote": "任何文档新增、删除或替换都增加知识库版本，旧版本缓存不再命中"
+            }
+          ],
+          "gold_ids": [
+            9
+          ],
+          "candidate_ids": [
+            9,
+            10,
+            24,
+            4,
+            18,
+            21,
+            7,
+            16
+          ],
+          "retrieved_ids": [
+            9
+          ],
+          "scores": [
+            0.8899407386779785
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 607.1125000016764,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "资料删掉后怎样避免继续给出旧缓存答案？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "ember-4",
+          "group": "ember",
+          "split": "dev",
+          "category": "cross_language",
+          "query": "Does an Ember cache hit still require a permission check?",
+          "answer": "仍需检查当前权限。",
+          "evidence": [
+            {
+              "doc_id": "ember",
+              "quote": "缓存命中仍需检查调用者当前权限"
+            }
+          ],
+          "gold_ids": [
+            10
+          ],
+          "candidate_ids": [
+            10,
+            9,
+            16,
+            4,
+            12,
+            15,
+            5,
+            6
+          ],
+          "retrieved_ids": [
+            10
+          ],
+          "scores": [
+            0.9812089204788208
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 620.0781000006828,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Does an Ember cache hit still require a permission check?",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "ember-negative",
+          "group": "ember",
+          "split": "dev",
+          "category": "unanswerable",
+          "query": "Ember 缓存服务器有多少 GB 内存？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            9,
+            10,
+            15,
+            5,
+            1,
+            20,
+            3,
+            23
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 636.8132999996305,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Ember 缓存服务器有多少 GB 内存？",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "fjord-1",
+          "group": "fjord",
+          "split": "test",
+          "category": "direct",
+          "query": "Fjord 的 reader 可以做什么？",
+          "answer": "只能提问和读取获授权原文。",
+          "evidence": [
+            {
+              "doc_id": "fjord",
+              "quote": "reader 只能提问和读取获授权原文"
+            }
+          ],
+          "gold_ids": [
+            11
+          ],
+          "candidate_ids": [
+            11,
+            12,
+            1,
+            20,
+            16,
+            9,
+            15,
+            6
+          ],
+          "retrieved_ids": [
+            11
+          ],
+          "scores": [
+            0.9647219777107239
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 691.612399998121,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Fjord 的 reader 可以做什么？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "fjord-2",
+          "group": "fjord",
+          "split": "test",
+          "category": "identifier",
+          "query": "FJ-403 是什么错误？",
+          "answer": "没有目标知识库的访问权限。",
+          "evidence": [
+            {
+              "doc_id": "fjord",
+              "quote": "FJ-403 时，表示用户没有目标知识库的访问权限。"
+            }
+          ],
+          "gold_ids": [
+            12
+          ],
+          "candidate_ids": [
+            12,
+            4,
+            20,
+            8,
+            19,
+            6,
+            5,
+            11
+          ],
+          "retrieved_ids": [
+            12
+          ],
+          "scores": [
+            0.9172796010971069
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 381.3757000025362,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 5,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "FJ-403 是什么错误？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "fjord-3",
+          "group": "fjord",
+          "split": "test",
+          "category": "paraphrase",
+          "query": "用户还能看对话，引用原文件的接口就不用再验权了吗？",
+          "answer": "仍需相同权限检查。",
+          "evidence": [
+            {
+              "doc_id": "fjord",
+              "quote": "原件下载、引用上下文和向量可视化接口使用与问答相同的权限检查。"
+            }
+          ],
+          "gold_ids": [
+            12
+          ],
+          "candidate_ids": [
+            12,
+            10,
+            4,
+            11,
+            9,
+            3,
+            16,
+            8
+          ],
+          "retrieved_ids": [
+            12
+          ],
+          "scores": [
+            0.42196404933929443
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 700.6057999969926,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "用户还能看对话，引用原文件的接口就不用再验权了吗？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "fjord-4",
+          "group": "fjord",
+          "split": "test",
+          "category": "cross_language",
+          "query": "Who may manage knowledge base members in Fjord?",
+          "answer": "owner。",
+          "evidence": [
+            {
+              "doc_id": "fjord",
+              "quote": "owner 可管理成员。"
+            }
+          ],
+          "gold_ids": [
+            11
+          ],
+          "candidate_ids": [
+            11,
+            12,
+            9,
+            16,
+            15,
+            21,
+            10,
+            20
+          ],
+          "retrieved_ids": [
+            11
+          ],
+          "scores": [
+            0.9950390458106995
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 256.5771999943536,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 3,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Who may manage knowledge base members in Fjord?",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "fjord-negative",
+          "group": "fjord",
+          "split": "test",
+          "category": "unanswerable",
+          "query": "Fjord 的登录密码最少需要几位？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            11,
+            12,
+            23,
+            9,
+            5,
+            3,
+            6,
+            7
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 623.4149999945657,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Fjord 的登录密码最少需要几位？",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "garnet-1",
+          "group": "garnet",
+          "split": "dev",
+          "category": "direct",
+          "query": "Garnet 向量召回多少候选？",
+          "answer": "四十。",
+          "evidence": [
+            {
+              "doc_id": "garnet",
+              "quote": "Garnet 的候选召回数固定为四十"
+            }
+          ],
+          "gold_ids": [
+            13
+          ],
+          "candidate_ids": [
+            13,
+            14,
+            5,
+            19,
+            6,
+            21,
+            20,
+            22
+          ],
+          "retrieved_ids": [
+            13
+          ],
+          "scores": [
+            0.9966191053390503
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 237.1765999996569,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 2,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Garnet 向量召回多少候选？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "garnet-2",
+          "group": "garnet",
+          "split": "dev",
+          "category": "identifier",
+          "query": "GR-RERANK-OFF 出现后采用什么排序？",
+          "answer": "退化为向量排序并标注降级。",
+          "evidence": [
+            {
+              "doc_id": "garnet",
+              "quote": "GR-RERANK-OFF 出现时退化为向量排序，并在追踪里标注降级。"
+            }
+          ],
+          "gold_ids": [
+            14
+          ],
+          "candidate_ids": [
+            14,
+            13,
+            18,
+            8,
+            22,
+            5,
+            6,
+            20
+          ],
+          "retrieved_ids": [
+            14
+          ],
+          "scores": [
+            0.9975154399871826
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 416.08540000015637,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 5,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "GR-RERANK-OFF 出现后采用什么排序？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "garnet-3",
+          "group": "garnet",
+          "split": "dev",
+          "category": "paraphrase",
+          "query": "重排没成功的请求还能算进重排效果实验吗？",
+          "answer": "不能。",
+          "evidence": [
+            {
+              "doc_id": "garnet",
+              "quote": "质量评测禁止把这种降级计入重排实验。"
+            }
+          ],
+          "gold_ids": [
+            14
+          ],
+          "candidate_ids": [
+            14,
+            8,
+            6,
+            5,
+            2,
+            18,
+            20,
+            10
+          ],
+          "retrieved_ids": [
+            14
+          ],
+          "scores": [
+            0.8659882545471191
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 629.0736000009929,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "重排没成功的请求还能算进重排效果实验吗？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "garnet-4",
+          "group": "garnet",
+          "split": "dev",
+          "category": "cross_language",
+          "query": "How many passages does Garnet keep for the generation context?",
+          "answer": "前五段。",
+          "evidence": [
+            {
+              "doc_id": "garnet",
+              "quote": "再保留前五段进入生成上下文。"
+            }
+          ],
+          "gold_ids": [
+            13
+          ],
+          "candidate_ids": [
+            13,
+            14,
+            23,
+            9,
+            21,
+            19,
+            1,
+            11
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": 0.0,
+            "mrr": 0,
+            "ndcg": 0.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 231.72890000569168,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 2,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "How many passages does Garnet keep for the generation context?",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "garnet-negative",
+          "group": "garnet",
+          "split": "dev",
+          "category": "unanswerable",
+          "query": "Garnet 使用哪个具体型号的交叉编码器？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            13,
+            14,
+            4,
+            16,
+            19,
+            1,
+            6,
+            20
+          ],
+          "retrieved_ids": [
+            13
+          ],
+          "scores": [
+            0.9342214465141296
+          ],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 235.73670000041602,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 2,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Garnet 使用哪个具体型号的交叉编码器？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "harbor-1",
+          "group": "harbor",
+          "split": "test",
+          "category": "direct",
+          "query": "Harbor 任务的租约多长？",
+          "answer": "六十秒。",
+          "evidence": [
+            {
+              "doc_id": "harbor",
+              "quote": "持有六十秒租约"
+            }
+          ],
+          "gold_ids": [
+            15
+          ],
+          "candidate_ids": [
+            15,
+            16,
+            9,
+            3,
+            5,
+            7,
+            23,
+            19
+          ],
+          "retrieved_ids": [
+            15
+          ],
+          "scores": [
+            0.9991589784622192
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 491.08840000553755,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 6,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Harbor 任务的租约多长？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "harbor-2",
+          "group": "harbor",
+          "split": "test",
+          "category": "identifier",
+          "query": "HB-DUPLICATE 应返回什么？",
+          "answer": "已有文档标识。",
+          "evidence": [
+            {
+              "doc_id": "harbor",
+              "quote": "HB-DUPLICATE 表示相同版本资料已完成入库，返回已有文档标识而不是重复生成向量。"
+            }
+          ],
+          "gold_ids": [
+            16
+          ],
+          "candidate_ids": [
+            16,
+            8,
+            22,
+            4,
+            15,
+            14,
+            21,
+            13
+          ],
+          "retrieved_ids": [
+            16
+          ],
+          "scores": [
+            0.9839296340942383
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 639.5771000024979,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "HB-DUPLICATE 应返回什么？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "harbor-3",
+          "group": "harbor",
+          "split": "test",
+          "category": "paraphrase",
+          "query": "工作进程失联后，别的进程何时能接手？",
+          "answer": "租约到期后。",
+          "evidence": [
+            {
+              "doc_id": "harbor",
+              "quote": "进程退出后，租约到期的任务才允许其他工作进程领取。"
+            }
+          ],
+          "gold_ids": [
+            15
+          ],
+          "candidate_ids": [
+            15,
+            2,
+            6,
+            3,
+            4,
+            7,
+            10,
+            22
+          ],
+          "retrieved_ids": [
+            15
+          ],
+          "scores": [
+            0.3007470965385437
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 635.7399999978952,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "工作进程失联后，别的进程何时能接手？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "harbor-4",
+          "group": "harbor",
+          "split": "test",
+          "category": "cross_language",
+          "query": "Which fields form the Harbor ingestion idempotency key?",
+          "answer": "知识库标识、文件内容哈希、索引版本。",
+          "evidence": [
+            {
+              "doc_id": "harbor",
+              "quote": "Harbor 用知识库标识、文件内容哈希和索引版本生成幂等键。"
+            }
+          ],
+          "gold_ids": [
+            16
+          ],
+          "candidate_ids": [
+            15,
+            16,
+            9,
+            1,
+            11,
+            10,
+            3,
+            12
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": 0.0,
+            "mrr": 0,
+            "ndcg": 0.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 0.5,
+            "ndcg": 0.6309297535714575
+          },
+          "latency_ms": 233.82560000027297,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 2,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Which fields form the Harbor ingestion idempotency key?",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "harbor-negative",
+          "group": "harbor",
+          "split": "test",
+          "category": "unanswerable",
+          "query": "Harbor 工作进程使用什么操作系统？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            15,
+            16,
+            22,
+            3,
+            10,
+            7,
+            9,
+            4
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 344.29870000167284,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 4,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Harbor 工作进程使用什么操作系统？",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "iris-1",
+          "group": "iris",
+          "split": "dev",
+          "category": "direct",
+          "query": "Iris 的目标块长度是多少？",
+          "answer": "五百字符。",
+          "evidence": [
+            {
+              "doc_id": "iris",
+              "quote": "Iris 以五百字符为目标块长度"
+            }
+          ],
+          "gold_ids": [
+            17
+          ],
+          "candidate_ids": [
+            17,
+            18,
+            23,
+            1,
+            5,
+            6,
+            24,
+            9
+          ],
+          "retrieved_ids": [
+            17
+          ],
+          "scores": [
+            0.9976575374603271
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 372.9179999936605,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 4,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Iris 的目标块长度是多少？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "iris-2",
+          "group": "iris",
+          "split": "dev",
+          "category": "identifier",
+          "query": "IR-EMPTY 代表什么状态？",
+          "answer": "没有可索引文本，任务失败并显示原因。",
+          "evidence": [
+            {
+              "doc_id": "iris",
+              "quote": "IR-EMPTY 指没有可索引文本，任务标为失败并显示原因。"
+            }
+          ],
+          "gold_ids": [
+            18
+          ],
+          "candidate_ids": [
+            18,
+            2,
+            4,
+            20,
+            10,
+            24,
+            9,
+            6
+          ],
+          "retrieved_ids": [
+            18
+          ],
+          "scores": [
+            0.9630522727966309
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 569.9077000026591,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "IR-EMPTY 代表什么状态？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "iris-3",
+          "group": "iris",
+          "split": "dev",
+          "category": "paraphrase",
+          "query": "一大段没有句号的文字怎么保证不会成为巨大文本块？",
+          "answer": "使用字符级保底切分。",
+          "evidence": [
+            {
+              "doc_id": "iris",
+              "quote": "没有标点的超长文本使用字符级保底切分。"
+            }
+          ],
+          "gold_ids": [
+            17
+          ],
+          "candidate_ids": [
+            17,
+            23,
+            18,
+            1,
+            13,
+            24,
+            9,
+            7
+          ],
+          "retrieved_ids": [
+            17
+          ],
+          "scores": [
+            0.303111732006073
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 595.5686000015703,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "一大段没有句号的文字怎么保证不会成为巨大文本块？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "iris-4",
+          "group": "iris",
+          "split": "dev",
+          "category": "cross_language",
+          "query": "How much sentence overlap does Iris retain?",
+          "answer": "一百字符左右。",
+          "evidence": [
+            {
+              "doc_id": "iris",
+              "quote": "保留一百字符左右的句子重叠。"
+            }
+          ],
+          "gold_ids": [
+            17
+          ],
+          "candidate_ids": [
+            17,
+            18,
+            23,
+            10,
+            24,
+            13,
+            9,
+            1
+          ],
+          "retrieved_ids": [
+            17
+          ],
+          "scores": [
+            0.9887834191322327
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 262.85289999941597,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 3,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "How much sentence overlap does Iris retain?",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "iris-negative",
+          "group": "iris",
+          "split": "dev",
+          "category": "unanswerable",
+          "query": "Iris 对不同语言分别使用哪种 tokenizer？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            17,
+            18,
+            13,
+            1,
+            23,
+            21,
+            3,
+            16
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 260.3149000060512,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 3,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Iris 对不同语言分别使用哪种 tokenizer？",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "jade-1",
+          "group": "jade",
+          "split": "test",
+          "category": "direct",
+          "query": "Jade 的检索延迟告警条件是什么？",
+          "answer": "p95 连续五分钟超过两秒。",
+          "evidence": [
+            {
+              "doc_id": "jade",
+              "quote": "检索延迟 p95 连续五分钟超过两秒时触发告警。"
+            }
+          ],
+          "gold_ids": [
+            19
+          ],
+          "candidate_ids": [
+            19,
+            20,
+            6,
+            14,
+            5,
+            13,
+            22,
+            4
+          ],
+          "retrieved_ids": [
+            19,
+            20
+          ],
+          "scores": [
+            0.9987068176269531,
+            0.9751681685447693
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 607.8859000044758,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Jade 的检索延迟告警条件是什么？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "jade-2",
+          "group": "jade",
+          "split": "test",
+          "category": "identifier",
+          "query": "JD-NO-SOURCES 一定意味着服务故障吗？",
+          "answer": "不，表示检索完成但没有返回资料。",
+          "evidence": [
+            {
+              "doc_id": "jade",
+              "quote": "JD-NO-SOURCES 表示检索完成但没有返回资料，这个事件单独计数，不等同于服务故障。"
+            }
+          ],
+          "gold_ids": [
+            20
+          ],
+          "candidate_ids": [
+            20,
+            12,
+            19,
+            6,
+            22,
+            4,
+            8,
+            10
+          ],
+          "retrieved_ids": [
+            20
+          ],
+          "scores": [
+            0.9997819066047668
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 672.7692000058596,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "JD-NO-SOURCES 一定意味着服务故障吗？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "jade-3",
+          "group": "jade",
+          "split": "test",
+          "category": "paraphrase",
+          "query": "用户等很久才看到第一个字，应先拆哪些阶段？",
+          "answer": "理解、检索、重排、模型首字等待。",
+          "evidence": [
+            {
+              "doc_id": "jade",
+              "quote": "先拆分理解、检索、重排与模型首字等待时间。"
+            }
+          ],
+          "gold_ids": [
+            20
+          ],
+          "candidate_ids": [
+            9,
+            17,
+            21,
+            20,
+            2,
+            13,
+            23,
+            22
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": 0.0,
+            "mrr": 0,
+            "ndcg": 0.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 0.25,
+            "ndcg": 0.43067655807339306
+          },
+          "latency_ms": 712.6567000013893,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "用户等很久才看到第一个字，应先拆哪些阶段？",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "jade-4",
+          "group": "jade",
+          "split": "test",
+          "category": "cross_language",
+          "query": "Does Jade include model cold start in sampled retrieval latency?",
+          "answer": "不包含，冷启动单独记录。",
+          "evidence": [
+            {
+              "doc_id": "jade",
+              "quote": "采样不包含模型冷启动，但冷启动时间单独记录。"
+            }
+          ],
+          "gold_ids": [
+            19
+          ],
+          "candidate_ids": [
+            19,
+            20,
+            8,
+            14,
+            5,
+            6,
+            7,
+            22
+          ],
+          "retrieved_ids": [
+            19
+          ],
+          "scores": [
+            0.9965835809707642
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 717.5258999996004,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Does Jade include model cold start in sampled retrieval latency?",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "jade-negative",
+          "group": "jade",
+          "split": "test",
+          "category": "unanswerable",
+          "query": "Jade 告警通知发送到哪个邮箱？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            19,
+            20,
+            6,
+            4,
+            12,
+            7,
+            16,
+            8
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 589.365200001339,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 5,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Jade 告警通知发送到哪个邮箱？",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "kite-1",
+          "group": "kite",
+          "split": "dev",
+          "category": "direct",
+          "query": "Kite 发布后旧索引保留多久？",
+          "answer": "至少四十八小时。",
+          "evidence": [
+            {
+              "doc_id": "kite",
+              "quote": "旧索引至少保留四十八小时"
+            }
+          ],
+          "gold_ids": [
+            21
+          ],
+          "candidate_ids": [
+            21,
+            22,
+            3,
+            9,
+            2,
+            4,
+            24,
+            19
+          ],
+          "retrieved_ids": [
+            21,
+            22
+          ],
+          "scores": [
+            0.9995552897453308,
+            0.5839153528213501
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 650.7928999999422,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Kite 发布后旧索引保留多久？",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "kite-2",
+          "group": "kite",
+          "split": "dev",
+          "category": "identifier",
+          "query": "KT-DIMENSION 出现时应用如何处理？",
+          "answer": "拒绝启动并要求显式迁移。",
+          "evidence": [
+            {
+              "doc_id": "kite",
+              "quote": "KT-DIMENSION 表示索引维度与查询模型不一致，应用拒绝启动并要求显式迁移。"
+            }
+          ],
+          "gold_ids": [
+            22
+          ],
+          "candidate_ids": [
+            22,
+            8,
+            14,
+            6,
+            16,
+            18,
+            20,
+            24
+          ],
+          "retrieved_ids": [
+            22
+          ],
+          "scores": [
+            0.9922120571136475
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 759.6655999950599,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "KT-DIMENSION 出现时应用如何处理？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "kite-3",
+          "group": "kite",
+          "split": "dev",
+          "category": "paraphrase",
+          "query": "换了嵌入模型，只重新生成提问向量行吗？",
+          "answer": "不行，也要重建文档向量。",
+          "evidence": [
+            {
+              "doc_id": "kite",
+              "quote": "只变更嵌入模型时也必须重建文档向量，不能只换查询向量"
+            }
+          ],
+          "gold_ids": [
+            21
+          ],
+          "candidate_ids": [
+            21,
+            14,
+            22,
+            16,
+            12,
+            18,
+            9,
+            13
+          ],
+          "retrieved_ids": [
+            21
+          ],
+          "scores": [
+            0.9764065146446228
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 651.5412000007927,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "换了嵌入模型，只重新生成提问向量行吗？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "kite-4",
+          "group": "kite",
+          "split": "dev",
+          "category": "cross_language",
+          "query": "What must be restored together when rolling back Kite?",
+          "answer": "模型版本、切块配置和索引读取指针。",
+          "evidence": [
+            {
+              "doc_id": "kite",
+              "quote": "回滚时同时恢复模型版本、切块配置和索引读取指针"
+            }
+          ],
+          "gold_ids": [
+            22
+          ],
+          "candidate_ids": [
+            22,
+            21,
+            8,
+            14,
+            24,
+            5,
+            7,
+            4
+          ],
+          "retrieved_ids": [
+            21,
+            22
+          ],
+          "scores": [
+            0.7096524834632874,
+            0.6925863027572632
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 0.5,
+            "ndcg": 0.6309297535714575
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 346.55019999627257,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 3,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "What must be restored together when rolling back Kite?",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "id": "kite-negative",
+          "group": "kite",
+          "split": "dev",
+          "category": "unanswerable",
+          "query": "Kite 团队上个月发布了多少次？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            21,
+            22,
+            5,
+            19,
+            15,
+            16,
+            6,
+            7
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 334.83240000350634,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 3,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Kite 团队上个月发布了多少次？",
+              "count": 0
+            }
+          ]
+        },
+        {
+          "id": "lotus-1",
+          "group": "lotus",
+          "split": "test",
+          "category": "direct",
+          "query": "Lotus 摘要长度上限是多少？",
+          "answer": "八百字符。",
+          "evidence": [
+            {
+              "doc_id": "lotus",
+              "quote": "一份最多八百字符的摘要"
+            }
+          ],
+          "gold_ids": [
+            23
+          ],
+          "candidate_ids": [
+            23,
+            24,
+            17,
+            1,
+            21,
+            19,
+            2,
+            3
+          ],
+          "retrieved_ids": [
+            23
+          ],
+          "scores": [
+            0.7635854482650757
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 619.1880999977002,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Lotus 摘要长度上限是多少？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "lotus-2",
+          "group": "lotus",
+          "split": "test",
+          "category": "identifier",
+          "query": "LT-MEMORY-STALE 时会继续使用旧摘要吗？",
+          "answer": "不会，暂不注入旧摘要。",
+          "evidence": [
+            {
+              "doc_id": "lotus",
+              "quote": "LT-MEMORY-STALE 表示用户修改历史后摘要待重算，这时暂不注入旧摘要。"
+            }
+          ],
+          "gold_ids": [
+            24
+          ],
+          "candidate_ids": [
+            24,
+            23,
+            21,
+            8,
+            22,
+            2,
+            4,
+            18
+          ],
+          "retrieved_ids": [
+            24
+          ],
+          "scores": [
+            0.9997140765190125
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 2749.5105999987572,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "LT-MEMORY-STALE 时会继续使用旧摘要吗？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "lotus-3",
+          "group": "lotus",
+          "split": "test",
+          "category": "paraphrase",
+          "query": "删掉会话以后，长期摘要也要一起清除吗？",
+          "answer": "要，在同一事务内删除。",
+          "evidence": [
+            {
+              "doc_id": "lotus",
+              "quote": "删除会话时，消息与长期记忆在同一事务内删除。"
+            }
+          ],
+          "gold_ids": [
+            24
+          ],
+          "candidate_ids": [
+            24,
+            23,
+            9,
+            4,
+            17,
+            10,
+            2,
+            7
+          ],
+          "retrieved_ids": [
+            24
+          ],
+          "scores": [
+            0.9952600598335266
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 2382.088099999237,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "删掉会话以后，长期摘要也要一起清除吗？",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "lotus-4",
+          "group": "lotus",
+          "split": "test",
+          "category": "cross_language",
+          "query": "Does Lotus keep six messages or six question-answer turns?",
+          "answer": "六条消息，通常三轮问答。",
+          "evidence": [
+            {
+              "doc_id": "lotus",
+              "quote": "六条消息不等于六轮问答，成对消息通常只覆盖三轮。"
+            }
+          ],
+          "gold_ids": [
+            23
+          ],
+          "candidate_ids": [
+            23,
+            24,
+            9,
+            10,
+            3,
+            21,
+            13,
+            18
+          ],
+          "retrieved_ids": [
+            23
+          ],
+          "scores": [
+            0.9878237247467041
+          ],
+          "metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "candidate_metrics": {
+            "recall": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0
+          },
+          "latency_ms": 1642.6537000006647,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 5,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Does Lotus keep six messages or six question-answer turns?",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "id": "lotus-negative",
+          "group": "lotus",
+          "split": "test",
+          "category": "unanswerable",
+          "query": "Lotus 的摘要模型每百万 token 多少钱？",
+          "answer": "",
+          "evidence": [],
+          "gold_ids": [],
+          "candidate_ids": [
+            23,
+            24,
+            21,
+            3,
+            17,
+            1,
+            22,
+            18
+          ],
+          "retrieved_ids": [],
+          "scores": [],
+          "metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "candidate_metrics": {
+            "recall": null,
+            "mrr": null,
+            "ndcg": null
+          },
+          "latency_ms": 2392.90500000061,
+          "trace": [
+            {
+              "stage": "rerank",
+              "label": "精排候选",
+              "count": 8,
+              "mode": "交叉编码器"
+            },
+            {
+              "stage": "retrieve",
+              "label": "检索知识库",
+              "query": "Lotus 的摘要模型每百万 token 多少钱？",
+              "count": 0
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

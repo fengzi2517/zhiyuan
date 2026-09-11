@@ -2,11 +2,23 @@ from sqlalchemy import JSON, create_engine, Column, Integer, String, DateTime, T
 from sqlalchemy.orm import declarative_base, sessionmaker
 from pgvector.sqlalchemy import Vector
 from datetime import datetime, timezone
+import hashlib
+import json
+from typing import Any
 from . import config
 
 Base = declarative_base()
 engine = create_engine(config.DATABASE_URL, pool_pre_ping=True)
 Session = sessionmaker(bind=engine)
+
+
+def _lock_session(session, session_id: str) -> None:
+    """Serialize conversation writers for the lifetime of this transaction."""
+    bind = getattr(session, "bind", None)
+    if getattr(getattr(bind, "dialect", None), "name", None) == "postgresql":
+        key = int.from_bytes(hashlib.sha256(session_id.encode("utf-8")).digest()[:8],
+                             byteorder="big", signed=True)
+        session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": key})
 
 
 def _assert_embedding_dimension(actual_type: str | None, expected_dim: int) -> None:
@@ -342,12 +354,51 @@ def get_memory(session_id: str) -> dict | None:
 
 def save_memory(session_id: str, summary: str, facts: str):
     with Session() as s:
-        m = s.query(SessionMemory).filter(SessionMemory.session_id == session_id).first()
-        if m:
-            m.summary, m.facts = summary, facts
-        else:
-            s.add(SessionMemory(session_id=session_id, summary=summary, facts=facts))
+        _lock_session(s, session_id)
+        _store_memory(s, session_id, summary, facts)
         s.commit()
+
+
+def _store_memory(s, session_id: str, summary: str, facts: str) -> None:
+    m = s.query(SessionMemory).filter(SessionMemory.session_id == session_id).first()
+    if m:
+        m.summary, m.facts = summary, facts
+    else:
+        s.add(SessionMemory(session_id=session_id, summary=summary, facts=facts))
+
+
+def _memory_snapshot(s, session_id: str) -> dict | None:
+    rows = (s.query(ChatMessage.id, ChatMessage.role, ChatMessage.content)
+            .filter(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.id.asc()).all())
+    if not rows:
+        return None
+    memory = s.query(SessionMemory).filter(SessionMemory.session_id == session_id).first()
+    serialized = None if memory is None else {
+        "summary": memory.summary, "facts": memory.facts, "updated_at": str(memory.updated_at),
+    }
+    state = {"messages": [tuple(row) for row in rows], "memory": serialized}
+    token = hashlib.sha256(json.dumps(state, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+    return {"token": token, "memory": serialized, "last_message_id": rows[-1][0]}
+
+
+def get_memory_snapshot(session_id: str) -> dict | None:
+    """Return a revision token, releasing the lock before any model work."""
+    with Session() as s:
+        _lock_session(s, session_id)
+        return _memory_snapshot(s, session_id)
+
+
+def save_memory_if_current(session_id: str, token: str, summary: str, facts: str) -> bool:
+    """Discard background output if messages or memory changed since its snapshot."""
+    with Session() as s:
+        _lock_session(s, session_id)
+        snapshot = _memory_snapshot(s, session_id)
+        if snapshot is None or snapshot["token"] != token:
+            return False
+        _store_memory(s, session_id, summary, facts)
+        s.commit()
+        return True
 
 # ---------- 会话历史 ----------
 def list_sessions() -> list[dict]:
@@ -379,6 +430,8 @@ def get_session_messages(session_id: str) -> list[dict]:
 
 
 def serialize_message(message: ChatMessage) -> dict:
+    outcome = next((step for step in reversed(message.trace or [])
+                    if step.get("stage") == "outcome"), {})
     return {
         "id": message.id,
         "role": message.role,
@@ -390,41 +443,80 @@ def serialize_message(message: ChatMessage) -> dict:
         "trace": message.trace or [],
         "elapsed_ms": message.elapsed_ms,
         "status": message.status or "complete",
+        "run_id": outcome.get("run_id", ""),
+        "answer_mode": outcome.get("answer_mode", ""),
+        "warnings": outcome.get("warnings", []),
     }
 
 def update_message(msg_id: int, content: str) -> bool:
     with Session() as s:
-        m = s.get(ChatMessage, msg_id)
+        owner = s.query(ChatMessage.session_id).filter(ChatMessage.id == msg_id).first()
+        if not owner:
+            return False
+        _lock_session(s, owner[0])
+        m = s.get(ChatMessage, msg_id, populate_existing=True)
         if not m:
             return False
         m.content = content
+        if m.role == "assistant":
+            m.sources, m.trace = [], []
+            m.semantic_intent, m.route = "", ""
+            m.elapsed_ms = None
+            m.status = "edited"
+        s.query(SessionMemory).filter(SessionMemory.session_id == m.session_id).delete()
         s.commit()
         return True
 
 def delete_session(session_id: str):
     with Session() as s:
+        _lock_session(s, session_id)
         s.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
         s.query(SessionMemory).filter(SessionMemory.session_id == session_id).delete()
         s.commit()
 
 def save_message(session_id: str, role: str, content: str, metadata: dict | None = None) -> int:
     with Session() as s:
-        metadata = metadata or {}
-        message = ChatMessage(
-            session_id=session_id,
-            role=role,
-            content=content,
-            semantic_intent=metadata.get("semantic_intent", ""),
-            route=metadata.get("route", ""),
-            sources=metadata.get("sources", []),
-            trace=metadata.get("trace", []),
-            elapsed_ms=metadata.get("elapsed_ms"),
-            status=metadata.get("status", "complete"),
-        )
+        _lock_session(s, session_id)
+        message = _new_message(session_id, role, content, metadata)
         s.add(message)
+        s.flush()
+        message_id = message.id
         s.commit()
-        s.refresh(message)
-        return message.id
+        return message_id
+
+
+def save_exchange(session_id: str, question: str, answer: str,
+                  metadata: dict | None = None, *, capture_memory: bool = False) -> dict[str, Any]:
+    """Persist a completed user/assistant pair atomically and in message order."""
+    with Session() as s:
+        _lock_session(s, session_id)
+        user = _new_message(session_id, "user", question)
+        s.add(user)
+        s.flush()
+        assistant = _new_message(session_id, "assistant", answer, metadata)
+        s.add(assistant)
+        s.flush()
+        ids = {"user": user.id, "assistant": assistant.id}
+        if capture_memory:
+            ids["_memory_snapshot"] = _memory_snapshot(s, session_id)
+        s.commit()
+        return ids
+
+
+def _new_message(session_id: str, role: str, content: str,
+                 metadata: dict | None = None) -> ChatMessage:
+    metadata = metadata or {}
+    return ChatMessage(
+        session_id=session_id,
+        role=role,
+        content=content,
+        semantic_intent=metadata.get("semantic_intent", ""),
+        route=metadata.get("route", ""),
+        sources=metadata.get("sources", []),
+        trace=metadata.get("trace", []),
+        elapsed_ms=metadata.get("elapsed_ms"),
+        status=metadata.get("status", "complete"),
+    )
 
 def get_history(session_id: str, limit: int = 6) -> list[str]:
     """取最近 limit 条消息，格式化为 Q:/A: 行，按时间正序返回"""
