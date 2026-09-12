@@ -1,38 +1,57 @@
 import time
 import json
 import re
-from openai import OpenAI, RateLimitError
+import logging
+import httpx
+from openai import OpenAI
 from . import config
 from .query_understanding import QueryUnderstanding, understand_query
 
-_client = OpenAI(base_url=config.LLM_BASE_URL, api_key=config.LLM_API_KEY, timeout=60)
+logger = logging.getLogger(__name__)
+_client = OpenAI(base_url=config.LLM_BASE_URL, api_key=config.LLM_API_KEY,
+                 timeout=httpx.Timeout(config.LLM_TIMEOUT_SECONDS, connect=10),
+                 max_retries=config.LLM_MAX_RETRIES)
 
-def chat(messages: list[dict], retries: int = 3) -> str:
-    """调用 LLM；429 限流时指数退避重试"""
-    for attempt in range(retries):
-        try:
-            resp = _client.chat.completions.create(model=config.LLM_MODEL, messages=messages)
-            return resp.choices[0].message.content
-        except RateLimitError:
-            if attempt == retries - 1:
-                raise
-            time.sleep(10 * (attempt + 1))   # 等 10s / 20s 再试
+def completion_options() -> dict:
+    options = {'max_tokens': config.LLM_MAX_TOKENS}
+    if config.LLM_REASONING_EFFORT:
+        options['reasoning_effort'] = config.LLM_REASONING_EFFORT
+    return options
+
+
+def chat(messages: list[dict]) -> str:
+    """One interactive request; any SDK retries are explicit configuration."""
+    started = time.perf_counter()
+    try:
+        resp = _client.chat.completions.create(model=config.LLM_MODEL, messages=messages, **completion_options())
+        return resp.choices[0].message.content
+    finally:
+        logger.info('llm mode=sync elapsed_ms=%s', round((time.perf_counter()-started)*1000))
 
 
 def chat_stream(messages: list[dict]):
     """Yield text deltas from an OpenAI-compatible streaming completion."""
-    response = _client.chat.completions.create(
-        model=config.LLM_MODEL, messages=messages, stream=True,
-    )
+    started = time.perf_counter()
+    first_event_ms = first_token_ms = None
+    response = None
     try:
+        response = _client.chat.completions.create(
+            model=config.LLM_MODEL, messages=messages, stream=True, **completion_options(),
+        )
         for chunk in response:
+            if first_event_ms is None:
+                first_event_ms = round((time.perf_counter()-started)*1000)
             delta = chunk.choices[0].delta.content if chunk.choices else None
             if delta:
+                if first_token_ms is None:
+                    first_token_ms = round((time.perf_counter()-started)*1000)
                 yield delta
     finally:
         close = getattr(response, "close", None)
         if close:
             close()
+        logger.info('llm mode=stream first_event_ms=%s first_token_ms=%s elapsed_ms=%s',
+                    first_event_ms, first_token_ms, round((time.perf_counter()-started)*1000))
 
 def _parse_json(text: str) -> dict | None:
     """容错解析 LLM 输出的 JSON（截取首个 {...} 块）"""
@@ -171,5 +190,5 @@ def update_memory(old: dict | None, question: str, answer: str) -> dict | None:
         if summary or facts:
             return {"summary": summary[:1000], "facts": facts[:1500]}
     except Exception as e:
-        print(f"[update_memory] FAIL {type(e).__name__}: {str(e)[:200]}", flush=True)
+        logger.warning('memory update failed error_type=%s', type(e).__name__)
     return None

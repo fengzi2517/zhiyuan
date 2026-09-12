@@ -7,6 +7,7 @@ psycopg[binary]
 pgvector
 langgraph
 openai
+httpx
 tavily-python
 sentence-transformers
 torch

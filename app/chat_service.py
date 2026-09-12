@@ -173,6 +173,7 @@ class ChatService:
             phase = "generating"
             yield _status(phase, "组织回答" if answer_mode != "insufficient_evidence" else "说明资料限制")
             stage_started = time.perf_counter()
+            first_token_ms = None
             if answer_mode == "insufficient_evidence":
                 if result.semantic_intent in ("current", "mixed") and not web_enabled:
                     answer = "当前未启用联网，且缺少足够资料，无法核实最新信息。请开启联网或提供可核验的最新资料。"
@@ -190,6 +191,8 @@ class ChatService:
                     try:
                         for token in upstream:
                             if token:
+                                if first_token_ms is None:
+                                    first_token_ms = round((time.perf_counter() - stage_started) * 1000)
                                 tokens.append(token)
                                 yield {"event": "token", "data": {"text": token}}
                     finally:
@@ -202,7 +205,7 @@ class ChatService:
                 if not isinstance(answer, str) or not answer.strip():
                     raise RuntimeError("empty generation")
             _record(trace, "generate", "生成回答" if answer_mode != "insufficient_evidence" else "资料不足",
-                    stage_started, mode=answer_mode)
+                    stage_started, mode=answer_mode, first_token_ms=first_token_ms)
 
             phase = "citations"
             stage_started = time.perf_counter()

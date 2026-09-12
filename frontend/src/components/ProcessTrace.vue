@@ -13,6 +13,7 @@ const labels = { understand: '理解问题', route: '选择处理方式', retrie
       <span v-for="(step, index) in trace" :key="index" class="process-step" :title="step.reason || step.mode || ''">
         <i></i>{{ step.label || labels[step.stage] || step.stage }}
         <small v-if="step.elapsed_ms != null">{{ step.elapsed_ms }} ms</small>
+        <small v-if="step.first_token_ms != null">首字 {{ step.first_token_ms }} ms</small>
       </span>
       <span v-if="activePhase" class="process-step active"><i></i>{{ activePhase }}</span>
     </div>

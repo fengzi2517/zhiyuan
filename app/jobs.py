@@ -171,7 +171,7 @@ def complete(claimed, content, chunks, embeddings) -> bool:
         return True
 
 
-def fail(claimed, *, permanent=False, error_type='Error') -> bool:
+def fail(claimed, *, permanent=False, error_type='Error', stage='unknown') -> bool:
     with db.Session.begin() as s:
         job = _owned(s, claimed['id'], claimed['token'])
         if job is None:
@@ -180,6 +180,10 @@ def fail(claimed, *, permanent=False, error_type='Error') -> bool:
         terminal = permanent or job.attempts >= job.max_attempts
         job.status = 'failed' if terminal else 'retry_wait'
         job.error = '文件无法解析，请检查格式和内容' if permanent else '处理暂时失败，请查看服务日志'
+        label = {'read': '读取原件', 'parse': '解析/OCR', 'chunk': '切块',
+                 'embedding': '向量化/模型加载', 'commit': '数据库提交'}.get(stage)
+        if label:
+            job.error = f'{label}阶段失败：{job.error}'
         job.updated_at, job.lease_until = now, None
         job.finished_at = now if terminal else None
         job.available_at = now + timedelta(seconds=min(300, 5 * 2 ** min(job.attempts, 6)))

@@ -12,6 +12,11 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://rag:rag@127.0.0.1
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://token.sensenova.cn/v1")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "sensenova-6.8-flash-lite")
+LLM_REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT", "none" if LLM_MODEL.startswith("sensenova-6.8") else "")
+LLM_MAX_TOKENS = max(64, int(os.getenv("LLM_MAX_TOKENS", "4096")))
+LLM_TIMEOUT_SECONDS = max(5, float(os.getenv("LLM_TIMEOUT_SECONDS", "60")))
+LLM_MAX_RETRIES = max(0, int(os.getenv("LLM_MAX_RETRIES", "0")))
+EMBEDDING_BATCH_SIZE = max(1, int(os.getenv("EMBEDDING_BATCH_SIZE", "4")))
 
 # 联网搜索（Tavily）
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")

@@ -53,7 +53,7 @@ def _parse_pdf(data: bytes) -> str:
 
 def _parse_pdf_units(data: bytes) -> list[ParsedUnit]:
     """Extract each PDF page separately so citations can reopen the matched page."""
-    import fitz   # PyMuPDF
+    import pymupdf as fitz
     doc = fitz.open(stream=data, filetype="pdf")
     units = []
     offset = 0
