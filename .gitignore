@@ -13,3 +13,5 @@ tmp_trace.json
 server.log
 frontend/dev.log
 frontend/node_modules/
+.test-tmp*/
+frontend/dist/

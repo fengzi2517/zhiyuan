@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { API_BASE_URL } from '../api'
+import { API_BASE_URL, csrfHeaders, clearAuth } from '../api'
 
 
 export function createSseParser(onEvent) {
@@ -42,10 +42,15 @@ export function createChatStreamer(fetchImpl = fetch) {
       try {
         const response = await fetchImpl(`${API_BASE_URL}/chat/stream`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+          headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...csrfHeaders() },
+          credentials: 'include',
           body: JSON.stringify(payload),
           signal: ownController.signal,
         })
+        if (response.status === 401) {
+          clearAuth()
+          globalThis.dispatchEvent?.(new Event('rag:unauthorized'))
+        }
         if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`)
         reader = response.body.getReader()
         const decoder = new TextDecoder()

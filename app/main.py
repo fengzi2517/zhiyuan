@@ -1,11 +1,15 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, BackgroundTasks, HTTPException
+from fastapi import FastAPI, UploadFile, BackgroundTasks, HTTPException, Depends, Request
 from fastapi.responses import FileResponse
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 import logging
+from copy import copy
+from . import auth
+from . import jobs
+from .auth_routes import router as auth_router
 
 from .db import (init_db, create_document, list_documents, set_status, Document,
                  Session, get_history, save_message,
@@ -54,19 +58,25 @@ async def lifespan(app: FastAPI):
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
         app_logger.addHandler(handler)
     app_logger.propagate = False
-    init_db()
+    from .migrate import require_schema
+    require_schema()
     yield
 
 app = FastAPI(title="RAG 知识库智能问答", lifespan=lifespan)
 
-# 前端开发服务器跨域放行（Vite 端口不固定，放行本机任意端口）
-import re
+app.include_router(auth_router)
+from .operations import router as operations_router, request_log
+app.include_router(operations_router)
+app.middleware('http')(request_log)
 app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
-    allow_methods=["*"],
-    allow_headers=["*"],
+    CORSMiddleware, allow_origins=auth.TRUSTED_ORIGINS,
+    allow_credentials=True, allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "X-CSRF-Token"],
 )
+
+def _uid(user):
+    # Direct legacy unit callers have no HTTP dependency injection.
+    return user.id if isinstance(user, auth.User) else None
 
 # ---------- 向量库管理 ----------
 class KbReq(BaseModel):
@@ -74,38 +84,81 @@ class KbReq(BaseModel):
     description: str = ""
 
 @app.post("/kbs")
-def api_create_kb(req: KbReq):
+def api_create_kb(req: KbReq, user=Depends(auth.current_user)):
     if not req.name.strip():
         raise HTTPException(status_code=400, detail="向量库名称不能为空")
-    return create_kb(req.name.strip(), req.description.strip())
+    return create_kb(req.name.strip(), req.description.strip(), user_id=_uid(user))
 
 @app.get("/kbs")
-def api_list_kbs():
-    return list_kbs()
+def api_list_kbs(user=Depends(auth.current_user)):
+    with Session() as s:
+        roles = {m.kb_id: m.role for m in s.query(auth.KBMembership).filter_by(user_id=user.id)}
+    return [{**kb, 'role': roles[kb['id']]} for kb in list_kbs(allowed_kb_ids=list(roles))]
 
 @app.delete("/kbs/{kb_id}")
-def api_delete_kb(kb_id: int):
-    delete_kb(kb_id)
+def api_delete_kb(kb_id: int, user=Depends(auth.current_user)):
+    auth.require_kb(user.id, kb_id, "owner")
+    jobs.delete_knowledge_base(kb_id, user_id=user.id)
     return {"ok": True}
 
 # ---------- 资料上传 ----------
-@app.post("/upload")
-async def upload(file: UploadFile, background: BackgroundTasks, kb_id: Optional[int] = None):
-    data = await file.read()
-    if len(data) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail="文件超过 20MB 上限")
+@app.post("/upload", status_code=202)
+async def upload(file: UploadFile, background: BackgroundTasks, kb_id: Optional[int] = None, user=Depends(auth.current_user)):
+    auth.require_kb(user.id, kb_id, "editor")
+    if Path(file.filename or '').suffix.lower() not in jobs.ALLOWED_SUFFIXES:
+        raise HTTPException(400, '不支持的文件类型')
+    data = bytearray()
+    try:
+        while block := await file.read(1024 * 1024):
+            data.extend(block)
+            if len(data) > MAX_UPLOAD_SIZE:
+                raise HTTPException(status_code=413, detail="文件超过 20MB 上限")
+    finally:
+        await file.close()
     if not data:
         raise HTTPException(status_code=400, detail="文件为空")
-    doc_id = create_document(file.filename, kb_id)
-    background.add_task(process_file, doc_id, kb_id, file.filename, data)
-    return {"doc_id": doc_id, "kb_id": kb_id, "status": "processing"}
+    from starlette.concurrency import run_in_threadpool
+    try:
+        return await run_in_threadpool(jobs.enqueue, kb_id, file.filename, bytes(data), user_id=user.id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 @app.get("/documents")
-def api_list_docs(kb_id: Optional[int] = None):
-    return list_documents(kb_id)
+def api_list_docs(kb_id: Optional[int] = None, user=Depends(auth.current_user)):
+    if kb_id is not None: auth.require_kb(user.id, kb_id)
+    rows = list_documents(kb_id, allowed_kb_ids=auth.allowed_kb_ids(user.id))
+    with Session() as s:
+        states = {j.doc_id: jobs.serialize(j) for j in s.query(jobs.IngestionJob)
+                  .filter(jobs.IngestionJob.doc_id.in_([r['id'] for r in rows]))}
+    return [{**row, 'job': states.get(row['id'])} for row in rows]
+
+
+@app.get('/documents/{doc_id}/job')
+def document_job(doc_id: int, user=Depends(auth.current_user)):
+    auth.require_document(user.id, doc_id)
+    with Session() as s:
+        job = s.query(jobs.IngestionJob).filter_by(doc_id=doc_id).first()
+        if job is None:
+            raise HTTPException(404, '旧文档没有任务记录，请重新上传')
+        return jobs.serialize(job)
+
+
+@app.post('/documents/{doc_id}/retry', status_code=202)
+def retry_document(doc_id: int, user=Depends(auth.current_user)):
+    auth.require_document(user.id, doc_id)
+    with Session() as s:
+        job = s.query(jobs.IngestionJob).filter_by(doc_id=doc_id).first()
+        if job is None:
+            raise HTTPException(409, '旧文档没有任务记录，请重新上传')
+        auth.require_kb(user.id, job.kb_id, 'editor')
+        job_id = job.id
+    if not jobs.retry(job_id, user_id=user.id):
+        raise HTTPException(409, '仅失败任务可以重试')
+    return {'job_id': job_id, 'status': 'queued'}
 
 @app.get("/documents/{doc_id}/content")
-def api_doc_content(doc_id: int):
+def api_doc_content(doc_id: int, user=Depends(auth.current_user)):
+    if _uid(user) is not None: auth.require_document(user.id, doc_id)
     """查看上传资料的提取文本"""
     from .db import get_document_content
     content = get_document_content(doc_id)
@@ -115,7 +168,8 @@ def api_doc_content(doc_id: int):
 
 
 @app.get("/documents/{doc_id}/chunks/{chunk_id}/context")
-def api_chunk_context(doc_id: int, chunk_id: int):
+def api_chunk_context(doc_id: int, chunk_id: int, user=Depends(auth.current_user)):
+    if _uid(user) is not None: auth.require_document(user.id, doc_id)
     context = get_chunk_context(doc_id, chunk_id)
     if context is None:
         raise HTTPException(status_code=404, detail="引用位置不存在")
@@ -131,17 +185,19 @@ def resolve_document_path(base_dir: str | Path, doc_id: int, stored_path: str) -
 
 
 @app.get("/documents/{doc_id}/original")
-def api_document_original(doc_id: int):
+def api_document_original(doc_id: int, user=Depends(auth.current_user)):
+    if _uid(user) is not None: auth.require_document(user.id, doc_id)
     info = get_document_file_info(doc_id)
     if info is None:
         raise HTTPException(status_code=404, detail="文档不存在")
     if not info["storage_path"]:
         raise HTTPException(status_code=409, detail="旧文档没有原件定位信息，请重新入库")
-    path = resolve_document_path(UPLOAD_DIR, doc_id, info["storage_path"])
+    path = resolve_document_path(jobs.UPLOAD_DIR, doc_id, info["storage_path"])
     return FileResponse(path, filename=info["filename"])
 
 @app.get("/kbs/{kb_id}/vectors")
-def api_kb_vectors(kb_id: Optional[int] = None):
+def api_kb_vectors(kb_id: Optional[int] = None, user=Depends(auth.current_user)):
+    if _uid(user) is not None: auth.require_kb(user.id, kb_id)
     """向量库可视化：PCA 降至二维，返回散点数据（按文档分组着色）。
     超过 3000 块时按最新截断采样，避免大库全量拉取拖垮内存。"""
     from .db import get_kb_chunks_for_viz
@@ -234,10 +290,13 @@ def _chat_options(req):
                 web_enabled=req.web_enabled, sim_threshold=req.sim_threshold)
 
 
-def _persist_result(req, result, background):
+def _persist_result(req, result, background, user=None, scopes=None):
     capture_memory = req.use_memory and result.get("answer_mode") != "insufficient_evidence"
+    kwargs = {} if _uid(user) is None else {"user_id": user.id, "allowed_kb_ids": scopes}
+    if _uid(user) is not None:
+        kwargs['login_hash'] = getattr(user, '_login_hash', None)
     ids = save_exchange(req.session_id, req.question, result["answer"], result,
-                        capture_memory=capture_memory)
+                        capture_memory=capture_memory, **kwargs)
     snapshot = ids.pop("_memory_snapshot", None)
     if snapshot:
         background.add_task(_refresh_memory, req.session_id, req.question,
@@ -245,18 +304,30 @@ def _persist_result(req, result, background):
     return ids
 
 
+def _authorized_chat(req, user):
+    if _uid(user) is None: return chat_service, None
+    auth.require_conversation(user.id, req.session_id, claim=True)
+    if req.kb_id is not None: auth.require_kb(user.id, req.kb_id)
+    scopes = [req.kb_id] if req.kb_id is not None else auth.allowed_kb_ids(user.id)
+    service = copy(chat_service)
+    service._has_knowledge = lambda kb_id: has_documents(kb_id, allowed_kb_ids=scopes)
+    service._search_kb = lambda question, kb_id, top_k: search_chunk_sources(question, kb_id, top_k, allowed_kb_ids=scopes)
+    return service, scopes
+
+
 @app.post("/chat")
-def chat(req: ChatReq, background: BackgroundTasks):
+def chat(req: ChatReq, background: BackgroundTasks, user=Depends(auth.current_user)):
+    service, scopes = _authorized_chat(req, user)
     options = _chat_options(req)
     try:
-        result = chat_service.run(req.question, **options).model_dump()
+        result = service.run(req.question, **options).model_dump()
     except WorkflowError as exc:
         raise HTTPException(status_code=502, detail=exc.data) from exc
     except Exception as exc:
         logger.warning("chat workflow failed error_type=%s", type(exc).__name__)
         raise HTTPException(status_code=502, detail="问答处理失败，请稍后重试。") from exc
     try:
-        result["message_ids"] = _persist_result(req, result, background)
+        result["message_ids"] = _persist_result(req, result, background, user, scopes)
     except Exception as exc:
         logger.warning("run_id=%s persistence failed error_type=%s",
                        result.get("run_id", ""), type(exc).__name__)
@@ -265,11 +336,12 @@ def chat(req: ChatReq, background: BackgroundTasks):
 
 
 @app.post("/chat/stream")
-def chat_stream(req: ChatReq, background: BackgroundTasks):
+def chat_stream(req: ChatReq, background: BackgroundTasks, user=Depends(auth.current_user)):
+    service, scopes = _authorized_chat(req, user)
     options = _chat_options(req)
 
     def events():
-        upstream = chat_service.run_stream(req.question, **options)
+        upstream = service.run_stream(req.question, **options)
         run_id, phase = "", "workflow"
         try:
             for event in upstream:
@@ -278,7 +350,7 @@ def chat_stream(req: ChatReq, background: BackgroundTasks):
                 if event["event"] == "done":
                     phase = "persistence"
                     result = event["data"]
-                    result["message_ids"] = _persist_result(req, result, background)
+                    result["message_ids"] = _persist_result(req, result, background, user, scopes)
                 yield encode_sse(event["event"], event["data"])
                 if event["event"] in ("done", "error"):
                     return
@@ -302,27 +374,34 @@ def chat_stream(req: ChatReq, background: BackgroundTasks):
 
 # ---------- 会话历史管理 ----------
 @app.get("/sessions")
-def api_list_sessions():
-    return list_sessions()
+def api_list_sessions(user=Depends(auth.current_user)):
+    return list_sessions(user_id=user.id)
 
 @app.get("/sessions/{session_id}/messages")
-def api_session_messages(session_id: str):
+def api_session_messages(session_id: str, user=Depends(auth.current_user)):
+    auth.require_conversation(user.id, session_id)
     return get_session_messages(session_id)
 
 @app.delete("/sessions/{session_id}")
-def api_delete_session(session_id: str):
-    delete_session(session_id)
+def api_delete_session(session_id: str, user=Depends(auth.current_user)):
+    delete_session(session_id, user_id=user.id)
     return {"ok": True}
 
 @app.get("/sessions/{session_id}/memory")
-def api_session_memory(session_id: str):
+def api_session_memory(session_id: str, user=Depends(auth.current_user)):
+    auth.require_conversation(user.id, session_id)
     return get_memory(session_id) or {"summary": "", "facts": ""}
 
 class MessageEditReq(BaseModel):
     content: str
 
 @app.put("/messages/{msg_id}")
-def api_edit_message(msg_id: int, req: MessageEditReq):
+def api_edit_message(msg_id: int, req: MessageEditReq, user=Depends(auth.current_user)):
+    from .db import ChatMessage
+    with Session() as s:
+        message = s.get(ChatMessage, msg_id)
+        if not message: raise HTTPException(404, "消息不存在")
+        auth.require_conversation(user.id, message.session_id, session=s)
     if not update_message(msg_id, req.content):
         raise HTTPException(status_code=404, detail="消息不存在")
     return {"ok": True}

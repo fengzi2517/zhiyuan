@@ -2,7 +2,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { View } from '@element-plus/icons-vue'
-import { listKbs, listDocs, uploadDoc, getDocContent } from '../api'
+import { listKbs, listDocs, uploadDoc, getDocContent, retryDocument } from '../api'
 import { shouldPollDocuments, summarizeDocuments } from '../polling'
 
 const kbs = ref([])
@@ -10,6 +10,8 @@ const selectedKb = ref(null)   // null = 全部
 const docs = ref([])
 const uploading = ref(false)
 const summary = computed(() => summarizeDocuments(docs.value))
+const canUpload = computed(() => kbs.value.some(k => k.id === selectedKb.value && ['owner', 'editor'].includes(k.role)))
+const canEdit = row => kbs.value.some(k => k.id === row.kb_id && ['owner', 'editor'].includes(k.role))
 let timer = null
 
 // 资料查看
@@ -51,12 +53,9 @@ async function onUpload(opt, targetKb = selectedKb.value) {
   }
 }
 
-function retryDoc(row) {
-  const picker = document.createElement('input')
-  picker.type = 'file'
-  picker.accept = '.pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.bmp,.webp'
-  picker.onchange = () => picker.files?.[0] && onUpload({ file: picker.files[0] }, row.kb_id)
-  picker.click()
+async function retryDoc(row) {
+  try { await retryDocument(row.id); ElMessage.success('已重新加入入库队列'); await refresh() }
+  catch (e) { ElMessage.error(e.response?.data?.detail || '重试失败') }
 }
 
 async function viewDoc(row) {
@@ -75,7 +74,7 @@ function statusTag(s) {
   return s === 'done' ? 'success' : s === 'failed' ? 'danger' : 'warning'
 }
 function statusText(s) {
-  return s === 'done' ? '已完成' : s === 'failed' ? '失败' : '处理中'
+  return ({ done: '已完成', failed: '失败', queued: '排队中', running: '执行中', retry_wait: '等待重试', cancelled: '已取消' })[s] || '处理中'
 }
 
 onMounted(async () => {
@@ -96,10 +95,10 @@ onUnmounted(() => clearInterval(timer))
             <el-option v-for="kb in kbs" :key="kb.id" :label="kb.name" :value="kb.id" />
           </el-select>
         </div>
-        <el-upload :show-file-list="false" :http-request="onUpload" :disabled="uploading"
+        <el-upload :show-file-list="false" :http-request="onUpload" :disabled="uploading || !canUpload"
                    accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.bmp,.webp">
-          <el-button type="primary" :loading="uploading">
-            {{ selectedKb ? '上传到当前库' : '上传（未选库）' }}
+          <el-button type="primary" :loading="uploading" :disabled="!canUpload">
+            {{ selectedKb ? '上传到当前库' : '请先选择向量库' }}
           </el-button>
         </el-upload>
       </div>
@@ -113,7 +112,7 @@ onUnmounted(() => clearInterval(timer))
     </div>
 
     <el-alert v-if="!selectedKb" type="info" :closable="false" style="margin-bottom: 12px"
-              title="未选择向量库时，上传的资料不归属于任何库；问答时选「全部」才会检索到它们" />
+              title="请选择具有编辑权限的向量库上传资料。当前列表只展示你有权访问的资料。" />
 
     <el-table :data="docs" class="doc-table">
       <el-table-column prop="id" label="ID" width="70" />
@@ -129,10 +128,11 @@ onUnmounted(() => clearInterval(timer))
         </template>
       </el-table-column>
       <el-table-column prop="error_message" label="失败原因" min-width="200" show-overflow-tooltip />
+      <el-table-column label="尝试次数" width="110"><template #default="{ row }">{{ row.job ? `${row.job.attempts} / ${row.job.max_attempts}` : '—' }}</template></el-table-column>
       <el-table-column label="操作" width="170" fixed="right">
         <template #default="{ row }">
           <el-button size="small" :icon="View" @click="viewDoc(row)">查看</el-button>
-          <el-button v-if="row.status === 'failed'" size="small" type="danger" text @click="retryDoc(row)">重新入库</el-button>
+          <el-button v-if="row.status === 'failed' && canEdit(row)" size="small" type="danger" text @click="retryDoc(row)">重新入库</el-button>
         </template>
       </el-table-column>
     </el-table>

@@ -8,7 +8,7 @@ from typing import Any
 from . import config
 
 Base = declarative_base()
-engine = create_engine(config.DATABASE_URL, pool_pre_ping=True)
+engine = create_engine(config.DATABASE_URL, pool_pre_ping=True, hide_parameters=True)
 Session = sessionmaker(bind=engine)
 
 
@@ -128,16 +128,21 @@ def init_db():
         conn.commit()
 
 # ---------- 向量库管理 ----------
-def create_kb(name: str, description: str = "") -> dict:
+def create_kb(name: str, description: str = "", user_id: int | None = None) -> dict:
     with Session() as s:
         kb = KnowledgeBase(name=name, description=description)
-        s.add(kb); s.commit(); s.refresh(kb)
+        s.add(kb); s.flush()
+        if user_id is not None:
+            from .auth import KBMembership
+            s.add(KBMembership(kb_id=kb.id, user_id=user_id, role="owner"))
+        s.commit(); s.refresh(kb)
         return {"id": kb.id, "name": kb.name, "description": kb.description}
 
-def list_kbs() -> list[dict]:
+def list_kbs(allowed_kb_ids=None) -> list[dict]:
     with Session() as s:
         rows = (s.query(KnowledgeBase, func.count(Document.id))
                    .outerjoin(Document, Document.kb_id == KnowledgeBase.id)
+                   .filter(KnowledgeBase.id.in_(allowed_kb_ids) if allowed_kb_ids is not None else True)
                    .group_by(KnowledgeBase.id)
                    .order_by(KnowledgeBase.id.desc()).all())
         return [{"id": kb.id, "name": kb.name, "description": kb.description,
@@ -251,9 +256,11 @@ def get_kb_chunks_for_viz(kb_id: int | None, limit: int = 3000) -> list[dict]:
     return [{"chunk_id": r[0], "doc_id": r[1], "content": r[2],
              "embedding": r[3], "filename": r[4] or f"文档{r[1]}"} for r in rows]
 
-def list_documents(kb_id: int | None = None, limit: int = 50) -> list[dict]:
+def list_documents(kb_id: int | None = None, limit: int = 50, allowed_kb_ids=None) -> list[dict]:
     with Session() as s:
         q = s.query(Document)
+        if allowed_kb_ids is not None:
+            q = q.filter(Document.kb_id.in_(allowed_kb_ids))
         if kb_id is not None:
             q = q.filter(Document.kb_id == kb_id)
         return [{"id": d.id, "kb_id": d.kb_id, "filename": d.filename,
@@ -261,9 +268,11 @@ def list_documents(kb_id: int | None = None, limit: int = 50) -> list[dict]:
                 for d in q.order_by(Document.id.desc()).limit(limit)]
 
 
-def has_documents(kb_id: int | None = None) -> bool:
+def has_documents(kb_id: int | None = None, allowed_kb_ids=None) -> bool:
     with Session() as s:
         query = s.query(Document.id).filter(Document.status == "done")
+        if allowed_kb_ids is not None:
+            query = query.filter(Document.kb_id.in_(allowed_kb_ids))
         if kb_id is not None:
             query = query.filter(Document.kb_id == kb_id)
         return query.first() is not None
@@ -295,11 +304,13 @@ def search_chunks_with_scores(question: str, kb_id: int | None = None, top_k: in
     return [(r[0], float(r[1])) for r in rows]
 
 
-def search_chunk_sources(question: str, kb_id: int | None = None, top_k: int = 8) -> list[dict]:
+def search_chunk_sources(question: str, kb_id: int | None = None, top_k: int = 8, allowed_kb_ids=None) -> list[dict]:
     """Vector retrieval with stable document and location metadata."""
     from .embeddings import embed_texts
     from sqlalchemy import text as _text
 
+    if allowed_kb_ids is not None and not allowed_kb_ids:
+        return []
     qe = embed_texts([question], is_query=True)[0]
     sql = (
         "SELECT c.id, c.doc_id, d.filename, c.content, c.page_start, c.page_end, "
@@ -308,9 +319,15 @@ def search_chunk_sources(question: str, kb_id: int | None = None, top_k: int = 8
         "FROM chunks c LEFT JOIN documents d ON d.id = c.doc_id"
     )
     params = {"qe": str(qe), "k": top_k}
+    conditions = []
     if kb_id is not None:
-        sql += " WHERE c.kb_id = :kb"
+        conditions.append("c.kb_id = :kb")
         params["kb"] = kb_id
+    if allowed_kb_ids is not None:
+        conditions.append("c.kb_id IN (" + ",".join(":scope"+str(i) for i in range(len(allowed_kb_ids))) + ")")
+        params.update({"scope"+str(i):value for i,value in enumerate(allowed_kb_ids)})
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
     sql += " ORDER BY c.embedding <=> CAST(:qe AS vector) LIMIT :k"
     with Session() as session:
         rows = session.execute(_text(sql), params).all()
@@ -401,11 +418,13 @@ def save_memory_if_current(session_id: str, token: str, summary: str, facts: str
         return True
 
 # ---------- 会话历史 ----------
-def list_sessions() -> list[dict]:
+def list_sessions(user_id=None) -> list[dict]:
     """会话列表：按最近活跃排序，含消息数与预览"""
     with Session() as s:
+        from .auth import ConversationOwner
         rows = (s.query(ChatMessage.session_id, func.count(ChatMessage.id),
                         func.max(ChatMessage.created_at))
+                   .filter(ChatMessage.session_id.in_(s.query(ConversationOwner.session_id).filter(ConversationOwner.user_id == user_id, ConversationOwner.deleted == False)) if user_id is not None else True)
                    .group_by(ChatMessage.session_id)
                    .order_by(func.max(ChatMessage.created_at).desc()).all())
         result = []
@@ -467,9 +486,13 @@ def update_message(msg_id: int, content: str) -> bool:
         s.commit()
         return True
 
-def delete_session(session_id: str):
+def delete_session(session_id: str, user_id=None):
     with Session() as s:
         _lock_session(s, session_id)
+        if user_id is not None:
+            from .auth import require_conversation, ConversationOwner
+            require_conversation(user_id, session_id, session=s)
+            s.get(ConversationOwner, session_id).deleted = True
         s.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
         s.query(SessionMemory).filter(SessionMemory.session_id == session_id).delete()
         s.commit()
@@ -486,10 +509,22 @@ def save_message(session_id: str, role: str, content: str, metadata: dict | None
 
 
 def save_exchange(session_id: str, question: str, answer: str,
-                  metadata: dict | None = None, *, capture_memory: bool = False) -> dict[str, Any]:
+                  metadata: dict | None = None, *, capture_memory: bool = False, user_id=None, allowed_kb_ids=None, login_hash=None) -> dict[str, Any]:
     """Persist a completed user/assistant pair atomically and in message order."""
     with Session() as s:
         _lock_session(s, session_id)
+        if user_id is not None:
+            from .auth import require_conversation, require_kb, active_user
+            active_user(s, user_id)
+            if login_hash is not None:
+                from .auth import LoginSession, now
+                from fastapi import HTTPException
+                login = s.query(LoginSession).filter_by(token_hash=login_hash).with_for_update(read=True).first()
+                if not login or login.user_id != user_id or login.revoked or login.expires_at <= now():
+                    raise HTTPException(401, "登录会话已失效")
+            require_conversation(user_id, session_id, session=s)
+            for kb_id in allowed_kb_ids or []:
+                require_kb(user_id, kb_id, session=s)
         user = _new_message(session_id, "user", question)
         s.add(user)
         s.flush()

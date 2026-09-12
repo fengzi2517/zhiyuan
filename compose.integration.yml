@@ -1,0 +1,14 @@
+name: rag-integration
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: rag_test
+      POSTGRES_PASSWORD: isolated_test_only
+      POSTGRES_DB: rag_test_foundations
+    ports: ['127.0.0.1:5445:5432']
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U rag_test -d rag_test_foundations']
+      interval: 2s
+      timeout: 3s
+      retries: 20

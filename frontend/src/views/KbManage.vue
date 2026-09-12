@@ -2,13 +2,28 @@
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts'
-import { listKbs, createKb, deleteKb, getKbVectors } from '../api'
+import { listKbs, createKb, deleteKb, getKbVectors, listMembers, setMember, removeMember } from '../api'
 import { escapeHtml } from '../security'
 
 const kbs = ref([])
 const loading = ref(false)
 const dialogVisible = ref(false)
 const form = ref({ name: '', description: '' })
+const memberKb = ref(null)
+const members = ref([])
+const memberForm = ref({ user_id: 1, role: 'reader' })
+async function showMembers(kb) {
+  try { members.value = await listMembers(kb.id); memberKb.value = kb }
+  catch (e) { ElMessage.error(e.response?.data?.detail || '加载成员失败') }
+}
+async function saveMember() {
+  try { await setMember(memberKb.value.id, memberForm.value); await showMembers(memberKb.value) }
+  catch (e) { ElMessage.error(e.response?.data?.detail || '保存成员失败') }
+}
+async function deleteMember(member) {
+  try { await ElMessageBox.confirm('移除此成员的知识库权限？', '移除成员'); await removeMember(memberKb.value.id, member.user_id); await showMembers(memberKb.value) }
+  catch (e) { if (e !== 'cancel' && e !== 'close') ElMessage.error(e.response?.data?.detail || '移除失败') }
+}
 
 // 向量可视化
 const vizVisible = ref(false)
@@ -150,13 +165,14 @@ onBeforeUnmount(() => {
             <div class="kb-name"><span class="kb-index">{{ String(kb.id).padStart(2, '0') }}</span><b>{{ kb.name }}</b></div>
             <div>
               <el-button type="primary" size="small" text @click="showViz(kb)">可视化</el-button>
-              <el-button type="danger" size="small" text @click="onDel(kb)">删除</el-button>
+              <el-button v-if="kb.role === 'owner'" size="small" text @click="showMembers(kb)">成员</el-button>
+              <el-button v-if="kb.role === 'owner'" type="danger" size="small" text @click="onDel(kb)">删除</el-button>
             </div>
           </div>
           <div style="color: #909399; font-size: 13px; margin: 8px 0; min-height: 20px">
             {{ kb.description || '暂无描述' }}
           </div>
-          <el-tag size="small">{{ kb.doc_count }} 份资料</el-tag>
+          <el-tag size="small">{{ kb.doc_count }} 份资料 · {{ ({ owner: '所有者', editor: '可编辑', reader: '只读' })[kb.role] }}</el-tag>
         </el-card>
       </el-col>
     </el-row>
@@ -177,6 +193,13 @@ onBeforeUnmount(() => {
       </template>
     </el-dialog>
 
+    <el-dialog :model-value="!!memberKb" @update:model-value="value => { if (!value) memberKb = null }" title="知识库成员" width="560px" append-to-body>
+      <p>按账号 ID 分配权限。账号 ID 可由管理员在账号管理中查看。</p>
+      <el-form inline @submit.prevent="saveMember"><el-form-item label="账号 ID"><el-input-number v-model="memberForm.user_id" :min="1" /></el-form-item>
+        <el-form-item label="权限"><el-select v-model="memberForm.role" style="width: 110px"><el-option label="只读" value="reader" /><el-option label="编辑" value="editor" /><el-option label="所有者" value="owner" /></el-select></el-form-item>
+        <el-button type="primary" native-type="submit">保存</el-button></el-form>
+      <el-table :data="members"><el-table-column prop="user_id" label="账号 ID" /><el-table-column prop="role" label="权限" /><el-table-column label="操作"><template #default="{ row }"><el-button text type="danger" @click="deleteMember(row)">移除</el-button></template></el-table-column></el-table>
+    </el-dialog>
     <!-- 向量可视化弹窗 -->
     <el-dialog v-model="vizVisible" width="880px" top="4vh" @closed="onVizClosed" class="viz-dialog" append-to-body>
       <template #header>

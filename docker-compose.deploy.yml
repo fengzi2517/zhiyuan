@@ -1,0 +1,58 @@
+name: rag-deploy
+x-app: &app
+  image: rag-app:local
+  build: .
+  env_file: .env
+  environment:
+    DATABASE_URL: ${DEPLOY_DATABASE_URL:?Set DEPLOY_DATABASE_URL to the postgres service URL}
+    APP_ENV: production
+    TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:?Set the HTTPS frontend origin}
+    HF_HOME: /models
+    UPLOAD_DIR: /data/uploads
+  volumes:
+    - uploads:/data/uploads
+    - models:/models
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: {max-size: 10m, max-file: '3'}
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a strong database password}
+      POSTGRES_DB: rag
+    volumes: [pgdata:/var/lib/postgresql]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U rag -d rag']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  migrate:
+    <<: *app
+    command: [python, -m, app.migrate]
+    restart: 'no'
+    depends_on:
+      postgres: {condition: service_healthy}
+  web:
+    <<: *app
+    ports: ['127.0.0.1:8000:8000']
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+  worker:
+    <<: *app
+    command: [python, -m, app.worker]
+    stop_grace_period: 60s
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+volumes:
+  pgdata:
+  uploads:
+  models:

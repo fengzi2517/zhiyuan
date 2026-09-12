@@ -7,7 +7,7 @@ from app import main
 
 
 def test_document_location_routes_are_registered():
-    paths = {route.path for route in main.app.routes}
+    paths = set(main.app.openapi()['paths'])
     assert "/documents/{doc_id}/chunks/{chunk_id}/context" in paths
     assert "/documents/{doc_id}/original" in paths
 

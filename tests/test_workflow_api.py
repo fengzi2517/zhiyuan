@@ -31,6 +31,8 @@ def test_memory_update_passes_snapshot_token_to_conditional_save(monkeypatch):
 
 
 def test_stream_persistence_error_has_no_done_and_closes_iterator(monkeypatch):
+    # This test targets streaming persistence; real auth is covered by integration tests.
+    monkeypatch.setitem(main.app.dependency_overrides, main.auth.current_user, lambda: None)
     monkeypatch.setattr(main, "get_history", lambda *_args, **_kwargs: [])
     closed = []
     def output(*_args, **_kwargs):

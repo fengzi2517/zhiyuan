@@ -4,6 +4,8 @@
 
 ## 编排与会话工作流更新
 
+新增登录与知识库成员权限、PostgreSQL 持久入库队列和独立 Worker。真实数据库并发、跨用户接口权限以及本地 BGE-M3 入库检索已做定向验证。启动前必须运行迁移并创建管理员；详见 [部署与任务恢复](docs/部署与任务恢复.md)。
+
 - 普通与流式问答共用阶段执行器；阶段状态、耗时、运行标识和资料缺失提示可追踪。
 - 知识库/网络路径缺少依据时明确说明限制；混合检索保留可用来源；查询改写最多一次。
 - 用户与助手消息成对事务提交；记忆任务使用事务内快照和条件写回，防止历史变动后写入旧摘要。
@@ -29,7 +31,7 @@
 ## 架构
 
 ```
-上传 ─► 解析(OCR) ─► 语义切块 ─► BGE-M3 向量化 ─► pgvector(HNSW)
+登录/权限校验 ─► 上传持久化 ─► PostgreSQL任务 ─► Worker解析/切块/向量化 ─► pgvector
                                                         │
 提问 ─► 结构化语义理解 ─► 确定性路由 ─┬─ direct ────────────┐
                                       ├─ kb ─► pgvector ────┤
@@ -77,8 +79,12 @@ huggingface-cli download BAAI/bge-reranker-base --local-dir .hf-cache/BAAI/bge-r
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+python -m app.migrate
+python -m app.admin bootstrap admin
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
+
+另开终端运行 `python -m app.worker` 处理入库队列。管理员密码由命令行交互设置，不存在默认密码。前端使用 `localhost:5173`，API 自动匹配 hostname；变更端口时同步更新 TRUSTED_ORIGINS。
 
 ### 5. 启动前端
 

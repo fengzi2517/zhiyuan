@@ -1,5 +1,9 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { currentUser, logout, clearAuth } from './api'
+import LoginPanel from './components/LoginPanel.vue'
+import AccessManage from './views/AccessManage.vue'
 import { ChatDotRound, Collection, Files, Setting } from '@element-plus/icons-vue'
 import KbManage from './views/KbManage.vue'
 import DocManage from './views/DocManage.vue'
@@ -8,8 +12,21 @@ import SettingsDialog from './components/SettingsDialog.vue'
 
 const active = ref('chat')
 const settingsVisible = ref(false)
+const user = ref(null)
+const checking = ref(true)
+function expired() { user.value = null; active.value = 'chat'; clearAuth() }
+async function signOut() {
+  try { await logout(); expired() }
+  catch { ElMessage.error('退出失败，请检查连接后重试') }
+}
+onMounted(async () => {
+  window.addEventListener('rag:unauthorized', expired)
+  try { user.value = await currentUser() } catch { expired() }
+  finally { checking.value = false }
+})
+onUnmounted(() => window.removeEventListener('rag:unauthorized', expired))
 
-const titles = { chat: '智能问答', kb: '向量库管理', doc: '资料管理' }
+const titles = { chat: '智能问答', kb: '向量库管理', doc: '资料管理', access: '账号管理' }
 const chapters = { chat: '壹', kb: '贰', doc: '叁' }
 const subs = {
   chat: '检索增强生成，答案有据可循',
@@ -19,7 +36,9 @@ const subs = {
 </script>
 
 <template>
-  <el-container style="height: 100%">
+  <div v-if="checking" v-loading="true" style="height: 100vh" aria-label="正在检查登录状态" />
+  <LoginPanel v-else-if="!user" @authenticated="user = $event" />
+  <el-container v-else style="height: 100%">
     <el-aside width="228px" class="sidebar">
       <div class="logo">
         <div class="logo-mark serif">知</div>
@@ -40,9 +59,11 @@ const subs = {
         <el-menu-item index="doc">
           <el-icon><Files /></el-icon><span>资料管理</span>
         </el-menu-item>
+        <el-menu-item v-if="user.is_admin" index="access"><el-icon><Setting /></el-icon><span>账号管理</span></el-menu-item>
       </el-menu>
 
       <div class="sidebar-footer">
+        <div style="font-size: 13px; margin-bottom: 12px">{{ user.username }} <el-button text size="small" @click="signOut">退出</el-button></div>
         <div class="settings-btn" @click="settingsVisible = true">
           <el-icon><Setting /></el-icon><span>设置</span>
         </div>
@@ -64,7 +85,8 @@ const subs = {
         <div class="page-wrap">
           <Chat v-if="active === 'chat'" />
           <KbManage v-else-if="active === 'kb'" />
-          <DocManage v-else />
+          <DocManage v-else-if="active === 'doc'" />
+          <AccessManage v-else-if="active === 'access' && user.is_admin" :user="user" />
         </div>
       </el-main>
     </el-container>
