@@ -55,6 +55,20 @@ export const getOriginalDocumentUrl = (docId) => `${API_BASE_URL}/documents/${do
 export const getKbVectors = (kbId) => api.get(`/kbs/${kbId}/vectors`).then(r => r.data)
 
 // 会话
+export const listModels = () => api.get('/models').then(r => r.data)
+const attachmentPath = (sid, id = '') => `/sessions/${encodeURIComponent(sid)}/attachments${id === '' ? '' : `/${encodeURIComponent(id)}`}`
+export const listAttachments = sid => api.get(attachmentPath(sid)).then(r => r.data)
+export const uploadAttachments = (sid, files) => {
+  const form = new FormData()
+  files.forEach(file => form.append('files', file))
+  return api.post(attachmentPath(sid), form).then(r => r.data)
+}
+export const retryAttachment = (sid, id) => api.post(`${attachmentPath(sid, id)}/retry`).then(r => r.data)
+export const removeAttachment = (sid, id) => api.delete(attachmentPath(sid, id)).then(r => r.data)
+export const saveAttachment = (sid, id, kbId) => api.post(`${attachmentPath(sid, id)}/save-to-kb`, { kb_id: kbId }).then(r => r.data)
+export const getAttachmentContent = (sid, id) => api.get(`${attachmentPath(sid, id)}/content`).then(r => r.data)
+export const getAttachmentUrl = (sid, id) => `${API_BASE_URL}${attachmentPath(sid, id)}/original`
+export const getAttachmentPreviewUrl = (sid, id) => `${getAttachmentUrl(sid, id)}?preview=true`
 export const listSessions = () => api.get('/sessions').then(r => r.data)
 export const getSessionMessages = (sid) => api.get(`/sessions/${encodeURIComponent(sid)}/messages`).then(r => r.data)
 export const deleteSession = (sid) => api.delete(`/sessions/${encodeURIComponent(sid)}`).then(r => r.data)
@@ -71,4 +85,8 @@ export const chat = (question, sessionId, opts = {}) =>
     web_enabled: opts.webEnabled ?? true,
     sim_threshold: opts.simThreshold ?? 0.4,
     use_memory: opts.useMemory ?? true,
+    model_id: opts.modelId ?? null,
+    thinking_mode: opts.thinkingMode ?? 'fast',
+    vision_enabled: opts.visionEnabled ?? false,
+    attachment_ids: opts.attachmentIds ?? [],
   }).then(r => r.data)

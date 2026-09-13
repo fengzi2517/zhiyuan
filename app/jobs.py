@@ -9,9 +9,10 @@ from pathlib import Path
 from sqlalchemy import Column, Integer, String, DateTime, Text, Index, select, func, or_, and_
 from . import db, config
 from .config import UPLOAD_DIR
+from .file_pipeline import ALLOWED_SUFFIXES, validate_upload, store_atomic
+from . import queue_lease
 
 logger = logging.getLogger(__name__)
-ALLOWED_SUFFIXES = {'.pdf', '.docx', '.txt', '.md', '.png', '.jpg', '.jpeg', '.bmp', '.webp'}
 LEASE_SECONDS = max(15, int(os.getenv('JOB_LEASE_SECONDS', '120')))
 MAX_ATTEMPTS = max(1, int(os.getenv('JOB_MAX_ATTEMPTS', '3')))
 
@@ -39,39 +40,14 @@ Index('ix_jobs_available', IngestionJob.status, IngestionJob.available_at, Inges
 
 
 def enqueue(kb_id: int, filename: str, data: bytes, *, user_id=None) -> dict:
-    suffix = Path(filename).suffix.lower()
-    if suffix not in ALLOWED_SUFFIXES or not data or len(data) > 20 * 1024 * 1024:
-        raise ValueError('文件类型、内容或大小不合法')
+    validate_upload(filename, data)
     target = None
     try:
         with db.Session.begin() as s:
             if user_id is not None:
                 from .auth import require_kb
                 require_kb(user_id, kb_id, 'editor', session=s)
-            # KB -> Job -> Document is the common mutation lock order.
-            if s.execute(select(db.KnowledgeBase).where(db.KnowledgeBase.id == kb_id)
-                         .with_for_update(read=True)).scalar_one_or_none() is None:
-                raise ValueError('知识库不存在')
-            doc = db.Document(kb_id=kb_id, filename=Path(filename).name, status='queued')
-            s.add(doc)
-            s.flush()
-            directory = Path(UPLOAD_DIR).resolve() / str(doc.id)
-            directory.mkdir(parents=True, exist_ok=True)
-            target = directory / ('source' + suffix)
-            temporary = directory / (secrets.token_hex(16) + '.tmp')
-            try:
-                with temporary.open('xb') as stream:
-                    stream.write(data)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-                os.replace(temporary, target)
-            finally:
-                temporary.unlink(missing_ok=True)
-            doc.storage_path = str(target)
-            job = IngestionJob(doc_id=doc.id, kb_id=kb_id)
-            s.add(job)
-            s.flush()
-            result = {'doc_id': doc.id, 'job_id': job.id, 'kb_id': kb_id, 'status': 'queued'}
+            result, target = enqueue_in_session(s, kb_id, filename, data)
         logger.info('job_id=%s status=queued', result['job_id'])
         return result
     except BaseException:
@@ -80,12 +56,34 @@ def enqueue(kb_id: int, filename: str, data: bytes, *, user_id=None) -> dict:
         raise
 
 
+def enqueue_in_session(s, kb_id, filename, data):
+    """Caller owns authorization/transaction; returned path is cleaned on rollback."""
+    validate_upload(filename, data)
+    if s.execute(select(db.KnowledgeBase).where(db.KnowledgeBase.id == kb_id)
+                 .with_for_update(read=True)).scalar_one_or_none() is None:
+        raise ValueError('知识库不存在')
+    doc = db.Document(kb_id=kb_id, filename=Path(filename).name, status='queued')
+    s.add(doc)
+    s.flush()
+    target = Path(UPLOAD_DIR).resolve() / str(doc.id) / ('source' + Path(filename).suffix.lower())
+    try:
+        store_atomic(target, data)
+        doc.storage_path = str(target)
+        job = IngestionJob(doc_id=doc.id, kb_id=kb_id)
+        s.add(job)
+        s.flush()
+        return dict(doc_id=doc.id, job_id=job.id, kb_id=kb_id, status='queued'), target
+    except BaseException:
+        target.unlink(missing_ok=True)
+        raise
+
+
 def _now(s):
-    return s.execute(select(_clock(s))).scalar_one()
+    return queue_lease.now(s)
 
 
 def _clock(s):
-    return func.clock_timestamp() if s.bind.dialect.name == 'postgresql' else func.now()
+    return queue_lease.clock(s)
 
 
 def claim(worker_id: str) -> dict | None:
@@ -120,20 +118,12 @@ def claim(worker_id: str) -> dict | None:
 
 
 def _owned(s, job_id, token):
-    return s.execute(select(IngestionJob).where(
-        IngestionJob.id == job_id, IngestionJob.status == 'running',
-        IngestionJob.claim_token == token, IngestionJob.lease_until > _clock(s)
-    ).with_for_update()).scalar_one_or_none()
+    return queue_lease.owned(s, IngestionJob, job_id, token)
 
 
 def heartbeat(job_id, token) -> bool:
     with db.Session.begin() as s:
-        job = _owned(s, job_id, token)
-        if job is None:
-            return False
-        job.updated_at = _now(s)
-        job.lease_until = job.updated_at + timedelta(seconds=LEASE_SECONDS)
-        return True
+        return queue_lease.renew(s, IngestionJob, job_id, token, LEASE_SECONDS)
 
 
 def validate_vectors(chunks, embeddings):

@@ -5,6 +5,8 @@ import logging
 import httpx
 from openai import OpenAI
 from . import config
+from .model_profiles import ModelSelection
+from functools import lru_cache
 from .query_understanding import QueryUnderstanding, understand_query
 
 logger = logging.getLogger(__name__)
@@ -19,24 +21,44 @@ def completion_options() -> dict:
     return options
 
 
-def chat(messages: list[dict]) -> str:
+@lru_cache(maxsize=16)
+def _profile_client(base_url, api_key):
+    return OpenAI(base_url=base_url, api_key=api_key,
+                  timeout=httpx.Timeout(config.LLM_TIMEOUT_SECONDS, connect=10),
+                  max_retries=config.LLM_MAX_RETRIES)
+
+
+def _client_for_selection(selection):
+    if (selection.profile.base_url == config.LLM_BASE_URL
+            and selection.profile.api_key == config.LLM_API_KEY):
+        return _client
+    return _profile_client(selection.profile.base_url, selection.profile.api_key)
+
+
+def chat(messages: list[dict], *, selection: ModelSelection | None = None, timeout_seconds: float | None = None) -> str:
     """One interactive request; any SDK retries are explicit configuration."""
     started = time.perf_counter()
     try:
-        resp = _client.chat.completions.create(model=config.LLM_MODEL, messages=messages, **completion_options())
+        client = _client_for_selection(selection) if selection else _client
+        resp = client.chat.completions.create(
+            model=selection.model if selection else config.LLM_MODEL, messages=messages,
+            **({'timeout': timeout_seconds} if timeout_seconds is not None else {}),
+            **(selection.request_options() if selection else completion_options()))
         return resp.choices[0].message.content
     finally:
         logger.info('llm mode=sync elapsed_ms=%s', round((time.perf_counter()-started)*1000))
 
 
-def chat_stream(messages: list[dict]):
+def chat_stream(messages: list[dict], *, selection: ModelSelection | None = None):
     """Yield text deltas from an OpenAI-compatible streaming completion."""
     started = time.perf_counter()
     first_event_ms = first_token_ms = None
     response = None
     try:
-        response = _client.chat.completions.create(
-            model=config.LLM_MODEL, messages=messages, stream=True, **completion_options(),
+        client = _client_for_selection(selection) if selection else _client
+        response = client.chat.completions.create(
+            model=selection.model if selection else config.LLM_MODEL, messages=messages, stream=True,
+            **(selection.request_options() if selection else completion_options()),
         )
         for chunk in response:
             if first_event_ms is None:

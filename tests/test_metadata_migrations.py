@@ -37,6 +37,8 @@ def test_message_payload_keeps_response_metadata():
         trace = [{"step": "retrieve"}]
         elapsed_ms = 123
         status = "complete"
+        model_options = None
+        attachments = None
 
     payload = db.serialize_message(Message())
 
@@ -46,3 +48,4 @@ def test_message_payload_keeps_response_metadata():
     assert payload["trace"][0]["step"] == "retrieve"
     assert payload["elapsed_ms"] == 123
     assert payload["status"] == "complete"
+    assert payload['model_options'] == {} and payload['attachments'] == []

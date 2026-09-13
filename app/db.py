@@ -72,6 +72,8 @@ class ChatMessage(Base):
     trace = Column(JSON, default=list)
     elapsed_ms = Column(Integer, nullable=True)
     status = Column(String, default="complete")
+    model_options = Column(JSON, default=dict)
+    attachments = Column(JSON, default=list)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 Index("ix_chat_messages_session_created", ChatMessage.session_id, ChatMessage.created_at)
@@ -92,6 +94,8 @@ def metadata_migration_statements() -> list[str]:
         "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS trace JSON",
         "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS elapsed_ms INTEGER",
         "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'complete'",
+        "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS model_options JSON",
+        "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachments JSON",
     ]
 
 def init_db():
@@ -438,7 +442,24 @@ def list_sessions(user_id=None) -> list[dict]:
                 "last_at": str(last_at),
                 "preview": (first[0][:40] if first else "") or "（空会话）",
             })
-        return result
+        # Uploaded work must remain discoverable before the first successful answer.
+        from .attachments import Attachment
+        known = {row['session_id'] for row in result}
+        pending = (s.query(Attachment.session_id, func.max(Attachment.created_at))
+                   .join(ConversationOwner, ConversationOwner.session_id == Attachment.session_id)
+                   .filter(Attachment.deleted.is_(False), ConversationOwner.deleted.is_(False),
+                           ConversationOwner.user_id == Attachment.user_id)
+                   .filter(Attachment.user_id == user_id if user_id is not None else True)
+                   .group_by(Attachment.session_id).all())
+        for sid, last_at in pending:
+            if sid in known:
+                continue
+            first = s.query(Attachment.filename).filter_by(session_id=sid, deleted=False).order_by(Attachment.created_at, Attachment.id).first()
+            if first is None:  # Another request removed the last attachment after the aggregate read.
+                continue
+            result.append(dict(session_id=sid, message_count=0, last_at=str(last_at),
+                               preview=f'附件：{first[0][:35]}'))
+        return sorted(result, key=lambda row: row['last_at'], reverse=True)
 
 def get_session_messages(session_id: str) -> list[dict]:
     with Session() as s:
@@ -465,6 +486,8 @@ def serialize_message(message: ChatMessage) -> dict:
         "run_id": outcome.get("run_id", ""),
         "answer_mode": outcome.get("answer_mode", ""),
         "warnings": outcome.get("warnings", []),
+        "model_options": message.model_options or {},
+        "attachments": message.attachments or [],
     }
 
 def update_message(msg_id: int, content: str) -> bool:
@@ -493,6 +516,8 @@ def delete_session(session_id: str, user_id=None):
             from .auth import require_conversation, ConversationOwner
             require_conversation(user_id, session_id, session=s)
             s.get(ConversationOwner, session_id).deleted = True
+        from .attachments import cancel_in_session
+        cancel_in_session(s, session_id)
         s.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
         s.query(SessionMemory).filter(SessionMemory.session_id == session_id).delete()
         s.commit()
@@ -525,7 +550,20 @@ def save_exchange(session_id: str, question: str, answer: str,
             require_conversation(user_id, session_id, session=s)
             for kb_id in allowed_kb_ids or []:
                 require_kb(user_id, kb_id, session=s)
-        user = _new_message(session_id, "user", question)
+        metadata = dict(metadata or {})
+        attachment_ids = metadata.pop('_attachment_ids', [])
+        if attachment_ids:
+            from .attachments import require_items, serialize
+            items = require_items(s, user_id, session_id, attachment_ids, ready=True)
+            for item in items:
+                item.used = True
+            metadata['attachments'] = [serialize(item) for item in items]
+            for item in metadata['attachments']:
+                item['created_at'] = str(item['created_at'])
+        user = _new_message(session_id, "user", question, {
+            'model_options': metadata.get('model_options', {}),
+            'attachments': metadata.get('attachments', []),
+        })
         s.add(user)
         s.flush()
         assistant = _new_message(session_id, "assistant", answer, metadata)
@@ -551,6 +589,8 @@ def _new_message(session_id: str, role: str, content: str,
         trace=metadata.get("trace", []),
         elapsed_ms=metadata.get("elapsed_ms"),
         status=metadata.get("status", "complete"),
+        model_options=metadata.get('model_options', {}),
+        attachments=metadata.get('attachments', []),
     )
 
 def get_history(session_id: str, limit: int = 6) -> list[str]:

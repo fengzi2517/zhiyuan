@@ -1,14 +1,23 @@
 <script setup>
-import { nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Collection, Delete, Edit, Plus, Promotion, VideoPause } from '@element-plus/icons-vue'
 import { renderSafeMarkdown } from '../security'
-import { chat, listKbs, listSessions, getSessionMessages, deleteSession, editMessage, getSessionMemory } from '../api'
-import { settings } from '../settings'
+import { chat, listKbs, listSessions, getSessionMessages, deleteSession, editMessage, getSessionMemory, listModels, getAttachmentUrl } from '../api'
+import { settings, saveSettings } from '../settings'
 import { useChatStream } from '../composables/useChatStream'
+import AttachmentComposer from '../components/AttachmentComposer.vue'
+import { normalizeModelOptions } from '../attachments'
+import { newSessionId } from '../sessionId'
 import ProcessTrace from '../components/ProcessTrace.vue'
 import SourceDrawer from '../components/SourceDrawer.vue'
 
+const models = ref([]), composer = ref(null), attachments = ref({ cards: [], blocked: false })
+const currentModel = computed(() => models.value.find(m => m.id === settings.modelId))
+function normalizeModel() {
+  Object.assign(settings, normalizeModelOptions(currentModel.value, settings)); saveSettings()
+}
+watch(() => settings.modelId, normalizeModel)
 const kbs = ref([]), sessions = ref([]), messages = ref([])
 const currentSession = ref(''), selectedKb = ref(null), input = ref('')
 const sending = ref(false), listRef = ref(null), memoryVisible = ref(false)
@@ -18,9 +27,14 @@ const drawerOpen = ref(false), drawerSources = ref([]), activeCitation = ref(nul
 const { start: startStream, cancel: cancelStream } = useChatStream()
 const routeLabels = { direct: '直接回答', kb: '知识库', web: '网络检索', hybrid: '资料＋网络' }
 const phaseLabels = { understanding: '正在理解问题', retrieving: '正在检索知识库', reranking: '正在精排资料', rewriting: '正在改写检索词', searching_web: '正在查找网络资料', generating: '正在组织回答' }
+function phaseLabel(message) {
+  if (!message.loading) return ''
+  if (message.phase === 'attachments') return '正在准备附件资料，长文档将分组概括'
+  if (message.phase === 'generating' && message.modelOptions?.thinking_mode === 'deep' && !message.content) return '深度思考中，正在组织回答'
+  return phaseLabels[message.phase] || '正在处理'
+}
 let requestVersion = 0
 
-const newSessionId = () => `s${Date.now().toString(36)}`
 const scrollToBottom = () => nextTick(() => { if (listRef.value) listRef.value.scrollTop = listRef.value.scrollHeight })
 const loadKbs = async () => { kbs.value = await listKbs() }
 const loadSessions = async () => { sessions.value = await listSessions() }
@@ -35,7 +49,7 @@ async function openSession(sid) {
     messages.value = rows.map(row => ({
       id: row.id, role: row.role, content: row.content, route: row.route,
       intent: row.semantic_intent, sources: row.sources || [], trace: row.trace || [],
-      elapsedMs: row.elapsed_ms, status: row.status, warnings: row.warnings || [], runId: row.run_id,
+      attachments: row.attachments || [], modelOptions: row.model_options, elapsedMs: row.elapsed_ms, status: row.status, warnings: row.warnings || [], runId: row.run_id,
     }))
     scrollToBottom()
   } catch {
@@ -58,25 +72,28 @@ async function removeSession(sid) {
 }
 
 async function send() {
-  const question = input.value.trim()
-  if (!question || sending.value || historyLoading.value) return
+  const question = input.value.trim() || (attachments.value.cards.length ? '请概述这些附件的主要内容' : '')
+  if (!question || sending.value || historyLoading.value || attachments.value.blocked || !currentModel.value) return
   const ownVersion = ++requestVersion
   if (!currentSession.value) currentSession.value = newSessionId()
   input.value = ''
-  const userMessage = reactive({ role: 'user', content: question })
-  const pending = reactive({ role: 'assistant', content: '', sources: [], trace: [], warnings: [], loading: true, phase: 'understanding' })
+  const modelOptions = { model_id: settings.modelId, model_name: currentModel.value.name, model: currentModel.value.model, thinking_mode: settings.thinkingMode, vision_enabled: settings.visionEnabled, thinking_label: settings.thinkingMode === 'deep' ? '深度思考' : currentModel.value.fast_mode_label || '供应商默认' }
+  const userMessage = reactive({ role: 'user', content: question, attachments: attachments.value.cards.map(c => ({ ...c })), modelOptions })
+  const pending = reactive({ role: 'assistant', content: '', sources: [], trace: [], warnings: [], loading: true, phase: 'understanding', modelOptions })
   messages.value.push(userMessage, pending); sending.value = true; scrollToBottom()
   const payload = {
     question, session_id: currentSession.value, kb_id: selectedKb.value,
     top_k: settings.topK, web_enabled: settings.webEnabled,
     sim_threshold: settings.simThreshold, use_memory: settings.useMemory,
+    model_id: modelOptions.model_id, thinking_mode: modelOptions.thinking_mode,
+    vision_enabled: modelOptions.vision_enabled, attachment_ids: userMessage.attachments.map(c => c.id),
   }
   if (!settings.streamEnabled) {
     try {
-      const result = await chat(question, currentSession.value, { kbId: selectedKb.value, topK: settings.topK, webEnabled: settings.webEnabled, simThreshold: settings.simThreshold, useMemory: settings.useMemory })
+      const result = await chat(question, currentSession.value, { kbId: selectedKb.value, topK: settings.topK, webEnabled: settings.webEnabled, simThreshold: settings.simThreshold, useMemory: settings.useMemory, modelId: settings.modelId, thinkingMode: settings.thinkingMode, visionEnabled: settings.visionEnabled, attachmentIds: payload.attachment_ids })
       if (ownVersion !== requestVersion) return
       Object.assign(pending, { content: result.answer, route: result.route, intent: result.semantic_intent, sources: result.sources || [], trace: result.trace || [], elapsedMs: result.elapsed_ms, loading: false, id: result.message_ids?.assistant, warnings: result.warnings || [], runId: result.run_id })
-      userMessage.id = result.message_ids?.user; loadSessions()
+      pending.modelOptions = result.model_options || modelOptions; userMessage.id = result.message_ids?.user; composer.value?.refresh(); loadSessions()
     } catch (error) {
       if (ownVersion !== requestVersion) return
       const detail = error.response?.data?.detail
@@ -93,7 +110,7 @@ async function send() {
     if (event.event === 'trace') pending.trace = event.data || []
     if (event.event === 'done') {
       Object.assign(pending, { content: event.data.answer, sources: event.data.sources || [], trace: event.data.trace || [], elapsedMs: event.data.elapsed_ms, status: event.data.status, loading: false, id: event.data.message_ids?.assistant, warnings: event.data.warnings || [], runId: event.data.run_id })
-      userMessage.id = event.data.message_ids?.user; loadSessions()
+      pending.modelOptions = event.data.model_options || modelOptions; userMessage.id = event.data.message_ids?.user; composer.value?.refresh(); loadSessions()
     }
     if (event.event === 'error') { pending.content = event.data.message || '回答生成失败'; pending.error = true; pending.loading = false }
     scrollToBottom()
@@ -134,7 +151,7 @@ async function saveEdit(message) {
 async function showMemory() {
   memoryData.value = await getSessionMemory(currentSession.value); memoryVisible.value = true
 }
-onMounted(async () => { await Promise.all([loadKbs(), loadSessions()]); newChat() })
+onMounted(async () => { newChat(); try { await Promise.all([loadKbs(), loadSessions(), listModels().then(rows => { models.value = rows; if (!rows.some(m => m.id === settings.modelId)) settings.modelId = rows[0]?.id; normalizeModel() })]) } catch { ElMessage.error('模型或会话配置加载失败，请刷新页面') } })
 onUnmounted(stop)
 </script>
 
@@ -175,7 +192,9 @@ onUnmounted(stop)
                 <el-input v-model="message.editBuf" type="textarea" :rows="4" /><div class="edit-actions"><el-button size="small" @click="message.editing=false">取消</el-button><el-button size="small" type="primary" @click="saveEdit(message)">保存</el-button></div>
               </template>
               <template v-else>
-                <ProcessTrace v-if="message.role === 'assistant'" :trace="message.trace || []" :elapsed-ms="message.elapsedMs" :active-phase="message.loading ? phaseLabels[message.phase] : ''" />
+                <div v-if="message.modelOptions" class="model-stamp">{{ message.modelOptions.model_name || message.modelOptions.model }} · {{ message.modelOptions.thinking_label || (message.modelOptions.thinking_mode === 'deep' ? '深度思考' : '供应商默认') }} · {{ message.modelOptions.vision_enabled ? '视觉开启' : '文字模式' }}</div>
+                <div v-if="message.attachments?.length" class="history-attachments"><a v-for="file in message.attachments" :key="file.id" :href="getAttachmentUrl(currentSession, file.id)" target="_blank" rel="noopener noreferrer">▧ {{ file.filename }}</a></div>
+                <ProcessTrace v-if="message.role === 'assistant'" :trace="message.trace || []" :elapsed-ms="message.elapsedMs" :active-phase="phaseLabel(message)" />
                 <div v-if="message.role === 'user'" class="plain">{{ message.content }}</div>
                 <div v-else class="md-body" :class="{ streaming: message.loading && message.content }" v-html="renderAnswer(message.content)" @click="handleAnswerClick($event, message)"></div>
                 <div v-for="notice in message.warnings || []" :key="notice" class="answer-notice" role="status">{{ notice }}</div>
@@ -186,19 +205,24 @@ onUnmounted(stop)
           </div>
         </div>
 
-        <footer class="input-dock">
+        <footer class="input-dock" @dragover.prevent @drop.prevent="composer?.addFiles(Array.from($event.dataTransfer.files))" @paste="composer?.paste($event)">
+          <div class="model-controls"><el-select v-model="settings.modelId" aria-label="对话模型" :disabled="sending" style="width:210px"><el-option v-for="model in models" :key="model.id" :label="model.name" :value="model.id" /></el-select><el-switch v-model="settings.thinkingMode" active-value="deep" inactive-value="fast" active-text="深度思考" :disabled="sending || !currentModel?.supports_deep_thinking" @change="saveSettings" /><el-switch v-model="settings.visionEnabled" active-text="视觉看图" :disabled="sending || !currentModel?.supports_vision" @change="saveSettings" /><small>{{ currentModel?.model || '正在加载模型…' }} · {{ settings.thinkingMode === 'deep' ? '深度思考' : currentModel?.fast_mode_label || '供应商默认' }}</small></div>
+          <AttachmentComposer ref="composer" :session-id="currentSession" :vision="!!settings.visionEnabled" :disabled="sending || historyLoading" :kbs="kbs" @change="attachments = $event" @uploaded="loadSessions" />
+          <small v-if="currentModel && (!currentModel.supports_deep_thinking || !currentModel.supports_vision)" class="capability-note">{{ !currentModel.supports_deep_thinking ? '当前模型未配置深度思考控制。' : '' }}{{ !currentModel.supports_vision ? '当前模型不支持看图，图片使用文字识别。' : '' }}</small>
           <el-input v-model="input" type="textarea" :autosize="{ minRows: 1, maxRows: 5 }" resize="none" placeholder="写下你的问题…" :disabled="sending || historyLoading" @keydown.enter.exact.prevent="settings.enterSend && send()" />
-          <el-button v-if="sending" class="send-button stop" :icon="VideoPause" @click="stop">停止</el-button><el-button v-else type="primary" class="send-button" :icon="Promotion" :disabled="historyLoading" @click="send">发送</el-button>
+          <el-button v-if="sending" class="send-button stop" :icon="VideoPause" @click="stop">停止</el-button><el-button v-else type="primary" class="send-button" :icon="Promotion" :disabled="historyLoading || attachments.blocked || !currentModel || (!input.trim() && !attachments.cards.length)" @click="send">发送</el-button>
           <div class="input-note">Enter 发送 · 回答可能根据问题检索知识库或网络</div>
         </footer>
       </main>
-      <SourceDrawer :open="drawerOpen" :sources="drawerSources" :active-number="activeCitation" @close="drawerOpen=false" />
+      <SourceDrawer :session-id="currentSession" :open="drawerOpen" :sources="drawerSources" :active-number="activeCitation" @close="drawerOpen=false" />
     </section>
     <el-dialog v-model="memoryVisible" title="会话记忆" width="520px" append-to-body><h4>对话摘要</h4><p class="memory-copy">{{ memoryData.summary || '暂无摘要' }}</p><h4>关键要点</h4><pre class="memory-copy">{{ memoryData.facts || '暂无要点' }}</pre></el-dialog>
   </div>
 </template>
 
 <style scoped>
+.model-controls{display:flex;align-items:center;gap:14px;width:100%;flex-wrap:wrap}.model-controls small,.model-stamp{font-size:10px;color:var(--ink-3)}.model-stamp{margin-bottom:8px}.history-attachments{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}.history-attachments a{font-size:12px;color:var(--accent-deep)}.input-dock{flex-wrap:wrap}.input-dock>.el-textarea{flex:1;min-width:160px}
+
 .answer-notice { margin-top:10px; padding:9px 12px; border-left:3px solid var(--seal); background:var(--paper-2); color:var(--ink-2); font-size:12px; line-height:1.6; }
 .chat-layout{display:flex;gap:14px;height:100%;min-height:0}.session-panel{width:232px;flex:0 0 auto;display:flex;flex-direction:column;background:rgba(253,252,248,.78);border:1px solid var(--hairline);border-radius:4px 14px 14px 4px;overflow:hidden}.session-heading{padding:18px 17px 8px;display:flex;justify-content:space-between;align-items:baseline}.session-heading span{font-size:17px;font-weight:700;letter-spacing:.16em}.session-heading small{color:var(--ink-3)}.new-chat-btn{margin:7px 13px 13px;height:38px;letter-spacing:.12em}.session-list{overflow:auto;padding:0 9px 12px}.session-item{width:100%;text-align:left;border:0;border-left:2px solid transparent;background:transparent;padding:11px 12px;cursor:pointer;color:inherit;border-radius:2px 9px 9px 2px}.session-item:hover{background:var(--paper-3)}.session-item.active{background:var(--accent-wash);border-left-color:var(--accent)}.session-preview{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}.session-meta{display:flex;justify-content:space-between;margin-top:5px;color:var(--ink-3);font-size:10px}.session-del:hover{color:var(--seal)}.session-empty{text-align:center;color:var(--ink-3);padding:40px 0;font-size:12px}
 .conversation-shell{flex:1;min-width:0;display:flex;overflow:hidden;background:var(--paper-2);border:1px solid var(--hairline);border-radius:14px 4px 4px 14px;box-shadow:var(--el-box-shadow-light)}.chat-main{flex:1;min-width:0;display:flex;flex-direction:column}.chat-toolbar{height:64px;flex:0 0 auto;display:flex;align-items:center;gap:20px;padding:0 20px;border-bottom:1px solid var(--hairline-soft)}.toolbar-group{display:flex;align-items:center;gap:9px}.toolbar-label{font-size:11px;color:var(--ink-3);letter-spacing:.12em}.toolbar-spacer{flex:1}.route-policy{font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:7px;white-space:nowrap}.route-policy i{width:7px;height:7px;border-radius:50%;background:#5e8a5c;box-shadow:0 0 0 4px rgba(94,138,92,.1)}.route-policy i.off{background:var(--ink-3);box-shadow:none}

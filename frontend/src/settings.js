@@ -2,7 +2,7 @@ import { reactive } from 'vue'
 
 const KEY = 'rag-app-settings'
 
-export const defaults = { topK: 4, webEnabled: true, enterSend: true, simThreshold: 0.4, useMemory: true, streamEnabled: true }
+export const defaults = { topK: 4, webEnabled: true, enterSend: true, simThreshold: 0.4, useMemory: true, streamEnabled: true, modelId: null, thinkingMode: 'fast', visionEnabled: null }
 
 const browserStorage = globalThis.localStorage || { getItem: () => null, setItem: () => {} }
 

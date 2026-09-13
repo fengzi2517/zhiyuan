@@ -7,8 +7,10 @@ from app import db
 
 @pytest.fixture
 def storage(monkeypatch):
+    from app import attachments
     engine = create_engine('sqlite:///:memory:')
-    db.Base.metadata.create_all(engine, tables=[db.ChatMessage.__table__, db.SessionMemory.__table__])
+    db.Base.metadata.create_all(engine, tables=[db.ChatMessage.__table__, db.SessionMemory.__table__,
+        attachments.Attachment.__table__, attachments.AttachmentJob.__table__, attachments.AttachmentChunk.__table__])
     monkeypatch.setattr(db, 'Session', sessionmaker(bind=engine))
     yield engine
     engine.dispose()

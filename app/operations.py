@@ -57,9 +57,27 @@ def cleanup(*, apply=False, grace_hours=24):
     if not root.is_dir():
         return []
     removed = []
+    from .attachments import Attachment, cancel_in_session
     with db.Session.begin() as s:
         db._lock_session(s, 'file-maintenance')
+        from datetime import timedelta
+        # Orphan uploads expire only while still unsent. Session lock fences a concurrent send.
+        expired = s.query(Attachment.id, Attachment.session_id).filter(
+            Attachment.used.is_(False), Attachment.deleted.is_(False),
+            Attachment.created_at < auth.now() - timedelta(hours=24)).all()
+        planned = set()
+        for ident, session_id in sorted(expired, key=lambda row: row[1]):
+            db._lock_session(s, session_id)
+            item = s.get(Attachment, ident, populate_existing=True)
+            if item and not item.used and not item.deleted:
+                planned.add(ident)
+                removed.append('expire-attachment:' + ident)
+                if apply:
+                    cancel_in_session(s, session_id, [ident])
         referenced = {Path(row[0]).resolve() for row in s.query(db.Document.storage_path) if row[0]}
+        for item in s.query(Attachment).filter_by(deleted=False):
+            if item.id not in planned:
+                referenced.update(Path(p).resolve() for p in (item.storage_path, item.image_path) if p)
         cutoff = time.time() - grace_hours * 3600
         for directory in root.iterdir():
             if not directory.is_dir() or directory.is_symlink() or directory.resolve().parent != root:

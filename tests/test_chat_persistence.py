@@ -47,9 +47,13 @@ def test_delete_session_removes_messages_and_memory(monkeypatch):
             pass
 
     from app import db
+    from app import attachments
 
     monkeypatch.setattr(db, "Session", FakeSession)
+    cancelled = []
+    monkeypatch.setattr(attachments, 'cancel_in_session', lambda session, sid: cancelled.append((session, sid)))
     db.delete_session("session")
 
     assert deleted_models == [db.ChatMessage, db.SessionMemory]
+    assert isinstance(cancelled[0][0], FakeSession) and cancelled[0][1] == 'session'
 

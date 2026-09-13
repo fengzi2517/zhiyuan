@@ -11,6 +11,8 @@ class Source(BaseModel):
     content: str = ""
     url: str | None = None
     document_id: int | None = None
+    attachment_id: str | None = None
+    session_id: str | None = None
     chunk_id: int | None = None
     location: str = ""
     page_start: int | None = None

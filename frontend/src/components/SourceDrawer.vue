@@ -2,9 +2,10 @@
 import { computed, ref } from 'vue'
 import { Close, Link } from '@element-plus/icons-vue'
 import DocumentViewer from './DocumentViewer.vue'
+import AttachmentViewer from './AttachmentViewer.vue'
 import { dedupeSources, externalLinkAttrs } from './source-utils'
 
-const props = defineProps({ sources: { type: Array, default: () => [] }, open: Boolean, activeNumber: Number })
+const props = defineProps({ sources: { type: Array, default: () => [] }, open: Boolean, activeNumber: Number, sessionId: String })
 const emit = defineEmits(['close'])
 const selected = ref(null)
 const items = computed(() => dedupeSources(props.sources))
@@ -21,7 +22,7 @@ const attrs = externalLinkAttrs()
       <article v-for="source in items" :key="source.key" class="source-card" :class="{ active: source.number === activeNumber }">
         <div class="source-number">{{ source.number }}</div>
         <div class="source-content">
-          <div class="source-kind">{{ source.kind === 'web' ? '网络资料' : '知识库' }}</div>
+          <div class="source-kind">{{ source.attachment_id ? '会话附件' : source.kind === 'web' ? '网络资料' : '知识库' }}</div>
           <h4>{{ source.title }}</h4>
           <p v-if="source.location">{{ source.location }}</p>
           <p class="excerpt">{{ source.content?.slice(0, 150) }}</p>
@@ -32,7 +33,8 @@ const attrs = externalLinkAttrs()
       <div v-if="!items.length" class="drawer-empty">这条回答没有引用外部资料</div>
     </div>
     <el-dialog v-model="selected" :title="selected?.title" width="72vw" top="6vh" append-to-body destroy-on-close>
-      <DocumentViewer v-if="selected" :source="selected" />
+      <AttachmentViewer v-if="selected?.attachment_id" :source="selected" :session-id="sessionId" />
+      <DocumentViewer v-else-if="selected" :source="selected" />
     </el-dialog>
   </aside>
 </template>

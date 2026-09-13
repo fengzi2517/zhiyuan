@@ -2,12 +2,12 @@
 from sqlalchemy import text
 from . import db
 
-VERSION = 1
+VERSION = 2
 LOCK_KEY = 724619330123
 
 
 def migrate():
-    from . import auth, jobs  # register all metadata before create_all
+    from . import auth, jobs, attachments  # register all metadata before create_all
     if db.engine.dialect.name != 'postgresql':
         raise RuntimeError('部署迁移需要 PostgreSQL')
     with db.engine.connect() as lock:

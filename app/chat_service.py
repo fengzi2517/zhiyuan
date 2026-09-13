@@ -69,6 +69,7 @@ class ChatService:
         self._rewrite_query = rewrite_query
         self._candidate_k = candidate_k
         self._rerank_threshold = rerank_threshold
+        self._attachment_provider = None
 
     def run(self, question: str, **options) -> ChatResult:
         for event in self._execute(question, use_stream=False, **options):
@@ -101,6 +102,15 @@ class ChatService:
             _record(trace, "understand", "理解问题", stage_started,
                     intent=result.semantic_intent, reason=result.reason)
 
+            attachment_context = None
+            if self._attachment_provider:
+                phase = 'attachments'
+                yield _status(phase, '准备附件资料（长文档将分组处理）')
+                stage_started = time.perf_counter()
+                attachment_context = self._attachment_provider()
+                warnings.extend(attachment_context.warnings)
+                _record(trace, 'attachments', '准备附件资料', stage_started,
+                        coverage=attachment_context.coverage, count=len(attachment_context.sources))
             phase = "routing"
             stage_started = time.perf_counter()
             availability_failed = False
@@ -121,7 +131,7 @@ class ChatService:
             }}
             yield {"event": "trace", "data": list(trace)}
 
-            sources = []
+            sources = list(attachment_context.sources) if attachment_context else []
             if decision.needs_kb:
                 phase = "retrieving"
                 stage_started = time.perf_counter()
@@ -233,9 +243,11 @@ class ChatService:
             raise
         except Exception as exc:
             logger.warning("run_id=%s phase=%s status=failed error_type=%s", run_id, phase, type(exc).__name__)
+            from fastapi import HTTPException
             yield {"event": "error", "data": {
                 "code": "generation_failed" if phase == "generating" else "workflow_failed",
-                "message": "回答生成失败，请稍后重试。" if phase == "generating" else "问答处理失败，请稍后重试。",
+                "message": str(exc.detail) if isinstance(exc, HTTPException) else (
+                    "回答生成失败，请稍后重试。" if phase == "generating" else "问答处理失败，请稍后重试。"),
                 "status": "error", "run_id": run_id, "phase": phase, "trace": trace,
             }}
 
@@ -322,6 +334,7 @@ def _build_prompt(question, history, memory, sources, warnings=None, answer_mode
         "limitations": warnings or [], "recent_history": history[-6:],
         "conversation_memory": memory or {},
         "reference_data": [{"label": f"[{source.number}]", "title": source.title,
+                            "attachment_id": source.attachment_id,
                             "location": source.location, "content": source.content}
                            for source in sources],
     }, ensure_ascii=False)

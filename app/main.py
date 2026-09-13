@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, BackgroundTasks, HTTPException, Depends
 from fastapi.responses import FileResponse
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, PrivateAttr
 from typing import Optional
 import logging
 from copy import copy
@@ -65,6 +65,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="RAG 知识库智能问答", lifespan=lifespan)
 
 app.include_router(auth_router)
+from .attachment_routes import router as attachment_router
+app.include_router(attachment_router)
 from .operations import router as operations_router, request_log
 app.include_router(operations_router)
 app.middleware('http')(request_log)
@@ -247,22 +249,40 @@ def _project_vectors(vectors: list[list[float]]) -> tuple[list[list[float]], lis
     return projection[:, :2].tolist(), variance
 
 # ---------- 问答 ----------
+@app.get('/models')
+def models(user=Depends(auth.current_user)):
+    from .model_profiles import get_profiles
+    return get_profiles()
+
+
 class ChatReq(BaseModel):
-    question: str = Field(min_length=1)
+    question: str = Field(default='', max_length=12000)
     session_id: str = "default"
     kb_id: Optional[int] = None   # 指定向量库检索；None 检索全部
     top_k: int = Field(default=4, ge=1, le=10)  # 最终注入的片段数上限
     web_enabled: bool = True      # 知识库不足时是否联网搜索兜底
     sim_threshold: float = Field(default=0.4, ge=0.0, le=1.0)
     use_memory: bool = True       # 是否启用会话长期记忆
+    model_id: str | None = None
+    thinking_mode: str = 'fast'
+    vision_enabled: bool = False
+    attachment_ids: list[str] = Field(default_factory=list, max_length=5)
+    _selection: object = PrivateAttr(default=None)
+    _attachment_cards: list = PrivateAttr(default_factory=list)
 
     @field_validator("question")
     @classmethod
     def validate_question(cls, value: str) -> str:
         value = value.strip()
-        if not value:
-            raise ValueError("问题不能为空")
         return value
+
+    @model_validator(mode='after')
+    def validate_task(self):
+        if not self.question:
+            if not self.attachment_ids:
+                raise ValueError('问题不能为空')
+            self.question = '请概述这些附件的主要内容'
+        return self
 
 def _refresh_memory(session_id: str, question: str, answer: str, snapshot: dict):
     """Run model work outside the transaction; discard obsolete background results."""
@@ -291,11 +311,15 @@ def _chat_options(req):
 
 
 def _persist_result(req, result, background, user=None, scopes=None):
+    if req._selection is not None:
+        result['model_options'] = req._selection.public_metadata()
+    result['attachments'] = req._attachment_cards
+    metadata = {**result, '_attachment_ids': req.attachment_ids}
     capture_memory = req.use_memory and result.get("answer_mode") != "insufficient_evidence"
     kwargs = {} if _uid(user) is None else {"user_id": user.id, "allowed_kb_ids": scopes}
     if _uid(user) is not None:
         kwargs['login_hash'] = getattr(user, '_login_hash', None)
-    ids = save_exchange(req.session_id, req.question, result["answer"], result,
+    ids = save_exchange(req.session_id, req.question, result["answer"], metadata,
                         capture_memory=capture_memory, **kwargs)
     snapshot = ids.pop("_memory_snapshot", None)
     if snapshot:
@@ -312,6 +336,61 @@ def _authorized_chat(req, user):
     service = copy(chat_service)
     service._has_knowledge = lambda kb_id: has_documents(kb_id, allowed_kb_ids=scopes)
     service._search_kb = lambda question, kb_id, top_k: search_chunk_sources(question, kb_id, top_k, allowed_kb_ids=scopes)
+    from .model_profiles import resolve_selection
+    from . import attachments
+    from .attachment_context import prepare, build_messages, SummaryBudget
+    from .llm import chat as summarize
+    from fastapi.encoders import jsonable_encoder
+    import json
+    try:
+        selection = resolve_selection(req.model_id, req.thinking_mode, req.vision_enabled)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    req._selection = selection
+    if req.attachment_ids:
+        with Session() as s:
+            items = attachments.require_items(s, user.id, req.session_id, req.attachment_ids, ready=True)
+            if sum(i.is_image for i in items) > selection.profile.max_images and selection.vision_enabled:
+                raise HTTPException(400, '图片数量超过模型上限')
+            if not selection.vision_enabled and any(i.is_image and not i.ocr_available for i in items):
+                raise HTTPException(409, '图片未识别到文字，请启用视觉模型或移除此附件')
+            req._attachment_cards = jsonable_encoder([attachments.serialize(i) for i in items])
+    holder = {}
+    def check_access():
+        with Session() as s:
+            attachments.require_items(s, user.id, req.session_id, req.attachment_ids, ready=True)
+            for kb_id in scopes:
+                auth.require_kb(user.id, kb_id, session=s)
+            login_hash = getattr(user, '_login_hash', None)
+            if login_hash:
+                login = s.get(auth.LoginSession, login_hash)
+                if not login or login.revoked or login.expires_at <= auth.now():
+                    raise HTTPException(401, '登录会话已失效')
+    def prepare_context():
+        check_access()
+        budget = SummaryBudget()
+        def safe_summary(messages):
+            check_access()
+            return summarize(messages, timeout_seconds=budget.next_timeout())
+        holder['context'] = prepare(user.id, req.session_id, req.attachment_ids,
+                                    req.question, selection, safe_summary)
+        return holder['context']
+    if req.attachment_ids:
+        service._attachment_provider = prepare_context
+    def messages(prompt):
+        check_access()
+        if len(prompt) > selection.profile.context_chars:
+            raise HTTPException(413, '问题、历史和资料超过当前模型上下文预算，请缩短问题、开始新会话或选择更大上下文模型')
+        images = []
+        context = holder.get('context')
+        if context:
+            for reference in json.loads(prompt)['reference_data']:
+                ident = reference.get('attachment_id')
+                if ident in context.images:
+                    images.append((f"图片 {reference['label']}：{reference['title']}", context.images[ident]))
+        return build_messages(SYSTEM_POLICY, prompt, images)
+    service._generate = lambda prompt: llm_chat(messages(prompt), selection=selection)
+    service._stream_generate = lambda prompt: llm_chat_stream(messages(prompt), selection=selection)
     return service, scopes
 
 
