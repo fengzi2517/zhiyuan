@@ -16,4 +16,5 @@ opencv-python-headless
 pypdf
 python-docx
 PyMuPDF
+Pillow
 pytest

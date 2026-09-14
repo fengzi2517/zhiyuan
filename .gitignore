@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 .venv/
@@ -7,6 +9,12 @@ uploads/
 .worktrees/
 .superpowers/
 .pytest_cache/
+.pytest_cache*/
+*.log
+.coverage
+htmlcov/
+output/
+backups/
 .hf-cache/
 FlagEmbedding/
 tmp_trace.json
@@ -14,4 +22,5 @@ server.log
 frontend/dev.log
 frontend/node_modules/
 .test-tmp*/
+*.tmp
 frontend/dist/
